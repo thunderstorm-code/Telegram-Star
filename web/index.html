@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Telegram Star — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.3.0/fonts/remixicon.css" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="/eel.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-head glass-card">
+        <div class="brand-star-wrap">
+          <div class="brand-star"><i class="ri-star-fill"></i></div>
+          <div>
+            <h1>Telegram Star</h1>
+            <p>Desktop Control Panel</p>
+          </div>
+        </div>
+        <a class="ghost-btn" href="https://t.me/telegram" target="_blank" rel="noreferrer"><i class="ri-telegram-2-fill"></i> Telegram-канал</a>
+      </header>
+
+      <main class="main">
+        <section class="tab-panel active" data-panel="home">
+          <div class="hero glass-card fade-up">
+            <h2>Telegram Star Dashboard</h2>
+            <p>Стильная чёрно‑серая панель управления аккаунтами Telegram, адаптированная для работы на большом экране.</p>
+            <a class="primary-btn" href="https://t.me/telegram" target="_blank" rel="noreferrer"><i class="ri-arrow-right-up-line"></i> Перейти в канал</a>
+          </div>
+          <div class="stats-grid" id="statsGrid"></div>
+          <div class="section-header"><h3>Функции</h3></div>
+          <div class="module-grid" id="moduleGrid"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="accounts">
+          <div class="toolbar glass-card fade-up">
+            <input id="searchInput" placeholder="Поиск аккаунтов по имени, username, id..." />
+            <button id="openAdvancedFilter" class="ghost-btn"><i class="ri-equalizer-2-line"></i> Фильтры</button>
+          </div>
+          <div class="state-tabs" id="stateTabs"></div>
+          <div class="cards-grid" id="accountsGrid"></div>
+          <div class="pagination" id="pagination"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="tools">
+          <div class="section-header"><h3>Инструменты</h3></div>
+          <div class="tool-grid" id="toolGrid"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="numbers">
+          <div class="numbers-layout">
+            <div class="glass-card fade-up">
+              <h3><i class="ri-phone-find-line"></i> Подключение сервиса смены номера</h3>
+              <p>Подключите API-провайдера для автоматической смены номера в Telegram-аккаунтах.</p>
+              <button class="primary-btn"><i class="ri-plug-2-line"></i> Подключить API</button>
+            </div>
+            <div class="stats-grid" id="numbersStats"></div>
+            <div class="glass-card fade-up">
+              <h3><i class="ri-information-2-line"></i> О работе API</h3>
+              <p>Операции выполняются через очередь, ошибки и лимиты провайдера логируются. Для каждого аккаунта сохраняется история замены.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="settings">
+          <div class="settings-grid">
+            <div class="glass-card fade-up">
+              <h3><i class="ri-user-settings-line"></i> Профиль</h3>
+              <p>Пользователь: <strong>admin@telegramstar.local</strong></p>
+              <p>Роль: <strong>Owner</strong></p>
+            </div>
+            <div class="glass-card fade-up">
+              <h3><i class="ri-price-tag-3-line"></i> Кастомные теги</h3>
+              <div class="tag-form">
+                <input id="tagName" placeholder="Название тега" />
+                <input id="tagColor" type="color" value="#f5c542" />
+                <button id="addTagBtn" class="primary-btn"><i class="ri-add-line"></i> Добавить</button>
+              </div>
+              <div id="tagsList" class="tags-list"></div>
+            </div>
+            <div class="glass-card fade-up">
+              <h3><i class="ri-settings-3-line"></i> Дополнительно</h3>
+              <ul class="clean-list">
+                <li>Платежи</li>
+                <li>Интеграция с ботом</li>
+                <li>Уведомления</li>
+                <li>Служебные функции</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <nav id="nav" class="bottom-dock glass-card" aria-label="Main navigation">
+        <button class="nav-item active" data-tab="home"><i class="ri-home-5-line"></i><span>Главная</span></button>
+        <button class="nav-item" data-tab="accounts"><i class="ri-group-2-line"></i><span>Аккаунты</span></button>
+        <button class="nav-item" data-tab="tools"><i class="ri-hammer-line"></i><span>Инструменты</span></button>
+        <button class="nav-item" data-tab="numbers"><i class="ri-sim-card-2-line"></i><span>Номера</span></button>
+        <button class="nav-item" data-tab="settings"><i class="ri-settings-4-line"></i><span>Настройки</span></button>
+      </nav>
+    </div>
+
+    <div id="advancedFilterModal" class="modal hidden">
+      <div class="modal-content glass-card">
+        <h3>Расширенные фильтры</h3>
+        <div class="modal-grid">
+          <label><input type="checkbox" id="fValid" /> Только валидные</label>
+          <label><input type="checkbox" id="fPremium" /> Только Premium</label>
+          <label><input type="checkbox" id="f2fa" /> Только с 2FA</label>
+          <label><input type="checkbox" id="fUsername" /> Только с username</label>
+        </div>
+        <div class="modal-actions">
+          <button id="applyFilters" class="primary-btn">Применить</button>
+          <button id="closeAdvancedFilter" class="ghost-btn">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="accountModal" class="modal hidden">
+      <div class="modal-content glass-card large">
+        <h3 id="accountModalTitle">Аккаунт</h3>
+        <div id="accountMeta" class="account-meta"></div>
+        <div class="modal-actions">
+          <button id="copyIdentity" class="ghost-btn"><i class="ri-file-copy-line"></i> Копировать username / ID</button>
+          <button id="downloadTdata" class="ghost-btn">tdata</button>
+          <button id="downloadTelethon" class="ghost-btn">telethon</button>
+          <button id="downloadPyrogram" class="ghost-btn">pyrogram</button>
+          <button id="closeAccountModal" class="primary-btn">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
