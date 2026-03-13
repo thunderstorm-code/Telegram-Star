@@ -18,14 +18,16 @@ const state = {
   search: '',
   selected: null,
   tags: JSON.parse(localStorage.getItem('ts_tags') || '[]'),
-  filters: { premium: 'any', twofa: 'any', username: 'any' }
+  filters: { premium: 'any', has2fa: 'any', username: 'any', authorized: 'any', source: 'any', phone: 'any' },
+  settings: null,
+  presets: []
 };
 
 function toast(text) {
   const t = $('toast');
   t.textContent = text;
   t.classList.remove('hidden');
-  setTimeout(() => t.classList.add('hidden'), 2000);
+  setTimeout(() => t.classList.add('hidden'), 2200);
 }
 
 function isEelAvailable() {
@@ -34,9 +36,31 @@ function isEelAvailable() {
 
 async function callEel(method, ...args) {
   if (!isEelAvailable() || typeof eel[method] !== 'function') {
-    return { ok: false, error: 'Eel backend недоступен. Запустите через python app.py' };
+    return { ok: false, error: 'Eel backend недоступен. Запустите python app.py' };
   }
   return eel[method](...args)();
+}
+
+function b64FromFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = String(reader.result).split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function collectFiles(inputId) {
+  const input = $(inputId);
+  const files = Array.from(input.files || []);
+  const result = [];
+  for (const f of files) {
+    result.push({ name: f.webkitRelativePath || f.name, data: await b64FromFile(f) });
+  }
+  return result;
 }
 
 function bindTabs() {
@@ -46,6 +70,17 @@ function bindTabs() {
       btn.classList.add('active');
       document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
       document.querySelector(`.tab[data-panel="${btn.dataset.tab}"]`).classList.add('active');
+    });
+  });
+}
+
+function bindSettingsTabs() {
+  document.querySelectorAll('[data-set-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.set-tab').forEach((x) => x.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.set-panel').forEach((x) => x.classList.remove('active'));
+      document.querySelector(`.set-panel[data-set-panel="${btn.dataset.setTab}"]`).classList.add('active');
     });
   });
 }
@@ -61,12 +96,12 @@ function renderHome() {
     <article class="stat"><strong>${invalid}</strong><small>Невалидные</small></article>`;
 
   const features = [
-    ['ri-user-add-line', 'Добавление аккаунтов', 'Добавляйте api_id/api_hash/phone и авторизуйте.'],
-    ['ri-key-2-line', 'Авторизация', 'Запрос кода и вход с 2FA.'],
+    ['ri-folder-upload-line', 'Импорт .session/tdata', 'Добавление аккаунтов только файлами, как вы и просили.'],
+    ['ri-key-2-line', 'Авторизация', 'Запрос кода и вход с 2FA для Telethon.'],
     ['ri-chat-1-line', 'Сообщения', 'Отправка сообщений от выбранного аккаунта.'],
-    ['ri-message-3-line', 'Диалоги', 'Просмотр последних диалогов.'],
-    ['ri-download-2-line', 'Экспорт', 'Выгрузка telethon/pyrogram/tdata'],
-    ['ri-filter-3-line', 'Фильтры', 'Статусы и расширенные фильтры.']
+    ['ri-message-3-line', 'Диалоги', 'Просмотр последних диалогов аккаунта.'],
+    ['ri-download-2-line', 'Экспорт', 'Выгрузка telethon / pyrogram / tdata.'],
+    ['ri-smartphone-line', 'Шаблоны устройств', '10 пресетов device_model/system/version.']
   ];
 
   $('homeFeatures').innerHTML = features.map(([icon, title, text]) => `
@@ -83,18 +118,23 @@ function renderHome() {
 function passTriFilter(value, mode) {
   if (mode === 'any') return true;
   if (mode === 'yes') return Boolean(value);
-  return !value;
+  if (mode === 'no') return !value;
+  return String(value) === String(mode);
 }
 
 function filteredAccounts() {
   return state.accounts.filter((a) => {
     if (state.status !== 'all' && a.status !== state.status) return false;
     if (!passTriFilter(a.premium, state.filters.premium)) return false;
-    if (!passTriFilter(a.has2fa, state.filters.twofa)) return false;
+    if (!passTriFilter(a.has2fa, state.filters.has2fa)) return false;
     if (!passTriFilter(Boolean(a.username), state.filters.username)) return false;
+    if (!passTriFilter(a.authorized, state.filters.authorized)) return false;
+    if (state.filters.source !== 'any' && a.source !== state.filters.source) return false;
+    if (!passTriFilter(Boolean(a.phone), state.filters.phone)) return false;
+
     const q = state.search.trim().toLowerCase();
     if (!q) return true;
-    return [a.name, a.phone, a.username || '', String(a.id || '')].join(' ').toLowerCase().includes(q);
+    return [a.name, a.phone || '', a.username || '', String(a.id || ''), a.source || ''].join(' ').toLowerCase().includes(q);
   });
 }
 
@@ -130,7 +170,7 @@ function renderAccounts() {
     <article class="acc-item">
       <div class="acc-left">
         <div class="acc-title">${a.name}</div>
-        <div class="acc-sub">${a.phone || '—'} · ${a.username ? '@' + a.username : 'без username'}</div>
+        <div class="acc-sub">${a.phone || 'без телефона'} · ${a.username ? '@' + a.username : 'без username'} · ${a.source || 'session'}</div>
       </div>
       <span class="status-tag status-${a.status || 'unknown'}">${statusMap[a.status] || 'Неизвестные'}</span>
       <button class="btn ghost" data-open="${a.name}">Открыть</button>
@@ -146,10 +186,7 @@ async function refreshAccounts() {
   if (Array.isArray(data)) {
     state.accounts = data.map((a) => ({
       ...a,
-      id: a.name,
-      premium: false,
-      has2fa: false,
-      username: ''
+      id: a.name
     }));
   }
   renderHome();
@@ -157,34 +194,46 @@ async function refreshAccounts() {
   renderAccounts();
 }
 
-function bindManager() {
-  $('addAccountBtn').addEventListener('click', async () => {
-    const res = await callEel('add_account', $('accName').value.trim(), $('accApiId').value.trim(), $('accApiHash').value.trim(), $('accPhone').value.trim());
-    toast(res.ok ? 'Аккаунт добавлен' : res.error);
+function selectedOrFirstAccountName() {
+  return state.selected || state.accounts[0]?.name || '';
+}
+
+function bindImportAndActions() {
+  $('importSessionBtn').addEventListener('click', async () => {
+    const files = await collectFiles('sessionInput');
+    const res = await callEel('import_session_files', $('importPrefix').value.trim(), files);
+    toast(res.ok ? `Импортировано: ${res.count}` : res.error);
+    if (res.ok) refreshAccounts();
+  });
+
+  $('importTdataBtn').addEventListener('click', async () => {
+    const files = await collectFiles('tdataInput');
+    const res = await callEel('import_tdata_files', $('tdataName').value.trim(), files);
+    toast(res.ok ? res.message : res.error);
     if (res.ok) refreshAccounts();
   });
 
   $('requestCodeBtn').addEventListener('click', async () => {
-    const name = state.selected || $('accName').value.trim();
+    const name = selectedOrFirstAccountName();
     const res = await callEel('request_code', name);
     toast(res.ok ? 'Код отправлен' : res.error);
   });
 
   $('signInBtn').addEventListener('click', async () => {
-    const name = state.selected || $('accName').value.trim();
+    const name = selectedOrFirstAccountName();
     const res = await callEel('sign_in', name, $('accCode').value.trim(), $('accPassword').value.trim());
     toast(res.ok ? 'Авторизация выполнена' : res.error);
     if (res.ok) refreshAccounts();
   });
 
   $('sendMessageBtn').addEventListener('click', async () => {
-    const name = state.selected || $('accName').value.trim();
+    const name = selectedOrFirstAccountName();
     const res = await callEel('send_message', name, $('msgTarget').value.trim(), $('msgText').value.trim());
     toast(res.ok ? 'Сообщение отправлено' : res.error);
   });
 
   $('loadDialogsBtn').addEventListener('click', async () => {
-    const name = state.selected || $('accName').value.trim();
+    const name = selectedOrFirstAccountName();
     const res = await callEel('fetch_dialogs', name, 30);
     toast(res.ok ? `Диалогов: ${res.dialogs.length}` : res.error);
   });
@@ -193,10 +242,8 @@ function bindManager() {
 async function openAccount(name) {
   state.selected = name;
   const res = await callEel('get_account_profile', name);
-  if (!res.ok) {
-    toast(res.error);
-    return;
-  }
+  if (!res.ok) return toast(res.error);
+
   const p = res.profile;
   $('modalAvatar').textContent = (p.name || name)[0]?.toUpperCase() || 'A';
   $('modalName').textContent = p.name || name;
@@ -228,7 +275,7 @@ async function openAccount(name) {
   $('downloadMenu').querySelectorAll('[data-format]').forEach((b) => {
     b.onclick = async () => {
       const r = await callEel('export_account', name, b.dataset.format);
-      toast(r.ok ? (r.message + ' | ' + r.path) : r.error);
+      toast(r.ok ? `${r.message} | ${r.path}` : r.error);
       $('downloadMenu').classList.add('hidden');
     };
   });
@@ -260,24 +307,46 @@ function bindFilters() {
   });
 }
 
-function bindSettings() {
-  document.querySelectorAll('[data-theme]').forEach((b) => {
-    b.addEventListener('click', () => {
+async function bindSettings() {
+  const st = await callEel('get_settings');
+  if (st.ok) {
+    state.settings = st.settings;
+    document.body.dataset.theme = st.settings.theme || 'gray';
+    $('apiId').value = st.settings.api_id || '';
+    $('apiHash').value = st.settings.api_hash || '';
+    document.querySelectorAll('.theme-pills .pill').forEach((x) => x.classList.remove('active'));
+    const active = document.querySelector(`.theme-pills .pill[data-theme="${document.body.dataset.theme}"]`);
+    if (active) active.classList.add('active');
+  }
+
+  const p = await callEel('list_device_presets');
+  if (p.ok) {
+    state.presets = p.presets;
+    $('devicePresetSelect').innerHTML = p.presets.map((x) => `<option value="${x.id}">${x.title} (${x.category})</option>`).join('');
+    if (state.settings?.device_preset) $('devicePresetSelect').value = state.settings.device_preset;
+    renderPresetInfo();
+  }
+
+  document.querySelectorAll('.theme-pills .pill').forEach((b) => {
+    b.addEventListener('click', async () => {
       const theme = b.dataset.theme;
       document.body.dataset.theme = theme;
-      localStorage.setItem('ts_theme', theme);
       document.querySelectorAll('.theme-pills .pill').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
+      await callEel('update_settings', { theme });
     });
   });
 
-  const savedTheme = localStorage.getItem('ts_theme') || 'gray';
-  document.body.dataset.theme = savedTheme;
-  const activeThemeBtn = document.querySelector(`.theme-pills .pill[data-theme="${savedTheme}"]`);
-  if (activeThemeBtn) {
-    document.querySelectorAll('.theme-pills .pill').forEach((x) => x.classList.remove('active'));
-    activeThemeBtn.classList.add('active');
-  }
+  $('saveApiBtn').addEventListener('click', async () => {
+    const res = await callEel('update_settings', { api_id: $('apiId').value.trim(), api_hash: $('apiHash').value.trim() });
+    toast(res.ok ? 'API сохранён' : res.error);
+  });
+
+  $('devicePresetSelect').addEventListener('change', renderPresetInfo);
+  $('saveDevicePresetBtn').addEventListener('click', async () => {
+    const res = await callEel('update_settings', { device_preset: $('devicePresetSelect').value });
+    toast(res.ok ? 'Шаблон устройства сохранен' : res.error);
+  });
 
   $('addTagBtn').addEventListener('click', () => {
     const name = $('tagName').value.trim();
@@ -290,6 +359,19 @@ function bindSettings() {
   });
 
   renderTags();
+}
+
+function renderPresetInfo() {
+  const preset = state.presets.find((x) => x.id === $('devicePresetSelect').value) || state.presets[0];
+  if (!preset) return;
+  $('devicePresetInfo').innerHTML = `
+    <div><strong>${preset.title}</strong> (${preset.category})</div>
+    <div>app_id: ${preset.app_id}</div>
+    <div>device_model: ${preset.device_model}</div>
+    <div>system_version: ${preset.system_version}</div>
+    <div>app_version: ${preset.app_version}</div>
+    <div>lang: ${preset.lang_code} / ${preset.system_lang_code}</div>
+  `;
 }
 
 function renderTags() {
@@ -315,9 +397,10 @@ function bindModalClose() {
 
 async function init() {
   bindTabs();
-  bindManager();
+  bindSettingsTabs();
+  bindImportAndActions();
   bindFilters();
-  bindSettings();
+  await bindSettings();
   bindModalClose();
   await refreshAccounts();
 }

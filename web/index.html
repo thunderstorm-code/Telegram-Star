@@ -15,7 +15,7 @@
     <div class="app">
       <header class="top card">
         <div class="logo-wrap">
-          <div class="logo-star"><i class="ri-star-fill"></i></div>
+          <div class="logo-star" aria-label="Telegram Star logo"></div>
           <div>
             <h1>Telegram Star</h1>
             <p>mini-app desktop panel</p>
@@ -28,7 +28,7 @@
         <section class="tab active" data-panel="home">
           <div class="card hero">
             <h2>Главная</h2>
-            <p>Полностью рабочая панель управления аккаунтами Telethon: добавление, авторизация, отправка сообщений, просмотр диалогов и экспорт сессий.</p>
+            <p>Полностью рабочая панель Eel + Telethon: импорт `.session`/`tdata`, авторизация, диалоги, сообщения и экспорт.</p>
           </div>
           <div id="stats" class="stats"></div>
           <h3>Функции</h3>
@@ -36,19 +36,22 @@
         </section>
 
         <section class="tab" data-panel="accounts">
-          <div class="card manager">
-            <h3>Управление Telethon</h3>
-            <div class="grid-4">
-              <input id="accName" placeholder="Alias" />
-              <input id="accApiId" placeholder="API ID" />
-              <input id="accApiHash" placeholder="API HASH" />
-              <input id="accPhone" placeholder="Phone +7..." />
+          <div class="card importer">
+            <h3>Импорт аккаунтов</h3>
+            <div class="import-grid">
+              <input id="importPrefix" placeholder="Префикс имени (опционально)" />
+              <input id="sessionInput" type="file" multiple accept=".session" />
+              <button id="importSessionBtn" class="btn">Импорт .session</button>
+            </div>
+            <div class="import-grid">
+              <input id="tdataName" placeholder="Имя пакета tdata" />
+              <input id="tdataInput" type="file" webkitdirectory directory multiple />
+              <button id="importTdataBtn" class="btn ghost">Импорт tdata папки</button>
             </div>
             <div class="row-actions">
-              <button id="addAccountBtn" class="btn">Добавить</button>
-              <button id="requestCodeBtn" class="btn ghost">Запросить код</button>
-              <input id="accCode" placeholder="Код" />
+              <input id="accCode" placeholder="Код авторизации" />
               <input id="accPassword" placeholder="2FA пароль (если есть)" />
+              <button id="requestCodeBtn" class="btn ghost">Запросить код</button>
               <button id="signInBtn" class="btn">Войти</button>
             </div>
             <div class="row-actions">
@@ -61,7 +64,7 @@
 
           <div class="card filters-shell">
             <div class="filter-top">
-              <input id="searchInput" placeholder="Поиск по аккаунтам / id / username" />
+              <input id="searchInput" placeholder="Поиск по имени / id / username / source" />
               <button id="openFilterModal" class="btn ghost"><i class="ri-equalizer-2-line"></i> Фильтры</button>
             </div>
             <div id="statusPills" class="status-pills"></div>
@@ -80,15 +83,39 @@
         </section>
 
         <section class="tab" data-panel="settings">
-          <div class="settings-pills card">
-            <h3>Тема панели</h3>
+          <div class="settings-tabs card">
+            <button class="set-tab active" data-set-tab="theme"><i class="ri-palette-line"></i> Тема</button>
+            <button class="set-tab" data-set-tab="api"><i class="ri-key-2-line"></i> API</button>
+            <button class="set-tab" data-set-tab="devices"><i class="ri-smartphone-line"></i> Устройства авторизации</button>
+            <button class="set-tab" data-set-tab="tags"><i class="ri-price-tag-3-line"></i> Теги</button>
+          </div>
+
+          <div class="set-panel active card" data-set-panel="theme">
+            <h3>Тема</h3>
             <div class="theme-pills">
               <button class="pill active" data-theme="gray">Светло‑серая</button>
               <button class="pill" data-theme="yellow">Желтая</button>
               <button class="pill" data-theme="blue">Голубая</button>
             </div>
           </div>
-          <div class="settings-pills card">
+
+          <div class="set-panel card" data-set-panel="api">
+            <h3>API настройки</h3>
+            <div class="import-grid">
+              <input id="apiId" placeholder="api_id" />
+              <input id="apiHash" placeholder="api_hash" />
+              <button id="saveApiBtn" class="btn">Сохранить API</button>
+            </div>
+          </div>
+
+          <div class="set-panel card" data-set-panel="devices">
+            <h3>Устройства авторизации</h3>
+            <select id="devicePresetSelect"></select>
+            <div id="devicePresetInfo" class="device-info"></div>
+            <button id="saveDevicePresetBtn" class="btn">Сохранить шаблон</button>
+          </div>
+
+          <div class="set-panel card" data-set-panel="tags">
             <h3>Теги</h3>
             <div class="tag-row">
               <input id="tagName" placeholder="Название тега" />
@@ -114,8 +141,11 @@
         <h3>Фильтры</h3>
         <div class="filters-grid">
           <div class="fcard"><label>Premium</label><div class="tri"><button data-f="premium:any" class="opt active">Не важно</button><button data-f="premium:no" class="opt">Нет</button><button data-f="premium:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>2FA</label><div class="tri"><button data-f="twofa:any" class="opt active">Не важно</button><button data-f="twofa:no" class="opt">Нет</button><button data-f="twofa:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>2FA</label><div class="tri"><button data-f="has2fa:any" class="opt active">Не важно</button><button data-f="has2fa:no" class="opt">Нет</button><button data-f="has2fa:yes" class="opt">Да</button></div></div>
           <div class="fcard"><label>Username</label><div class="tri"><button data-f="username:any" class="opt active">Не важно</button><button data-f="username:no" class="opt">Нет</button><button data-f="username:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>Авторизован</label><div class="tri"><button data-f="authorized:any" class="opt active">Не важно</button><button data-f="authorized:no" class="opt">Нет</button><button data-f="authorized:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>Источник</label><div class="tri"><button data-f="source:any" class="opt active">Не важно</button><button data-f="source:session" class="opt">session</button><button data-f="source:tdata" class="opt">tdata</button></div></div>
+          <div class="fcard"><label>Телефон</label><div class="tri"><button data-f="phone:any" class="opt active">Не важно</button><button data-f="phone:no" class="opt">Нет</button><button data-f="phone:yes" class="opt">Да</button></div></div>
         </div>
         <button id="applyFiltersBtn" class="btn">Применить</button>
       </div>
