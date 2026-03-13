@@ -13,121 +13,82 @@
   </head>
   <body data-theme="gray">
     <div class="app">
-      <header class="top card">
+      <header class="top card compact">
         <div class="logo-wrap">
           <div class="logo-star" aria-label="Telegram Star logo"></div>
           <div>
             <h1>Telegram Star</h1>
-            <p>mini-app desktop panel</p>
+            <p>Automated Combiner</p>
           </div>
         </div>
-        <a class="btn ghost" href="https://t.me/telegram" target="_blank" rel="noreferrer"><i class="ri-telegram-2-fill"></i> Канал</a>
+        <div class="top-actions">
+          <button id="quickImportBtn" class="btn"><i class="ri-upload-2-line"></i> Импорт</button>
+          <button id="quickFilterBtn" class="btn ghost"><i class="ri-equalizer-2-line"></i></button>
+        </div>
       </header>
 
       <main class="main">
         <section class="tab active" data-panel="home">
-          <div class="card hero">
-            <h2>Главная</h2>
-            <p>Полностью рабочая панель Eel + Telethon: импорт `.session`/`tdata`, авторизация, диалоги, сообщения и экспорт.</p>
+          <div class="card compact">
+            <div class="stats" id="stats"></div>
           </div>
-          <div id="stats" class="stats"></div>
-          <h3>Функции</h3>
-          <div id="homeFeatures" class="features-vertical"></div>
+          <div class="card compact">
+            <h3>Функции</h3>
+            <div id="homeFeatures" class="features-vertical"></div>
+          </div>
         </section>
 
         <section class="tab" data-panel="accounts">
-          <div class="card importer">
-            <h3>Импорт аккаунтов</h3>
-            <div class="import-grid">
-              <input id="importPrefix" placeholder="Префикс имени (опционально)" />
-              <input id="sessionInput" type="file" multiple accept=".session" />
-              <button id="importSessionBtn" class="btn">Импорт .session</button>
-            </div>
-            <div class="import-grid">
-              <input id="tdataName" placeholder="Имя пакета tdata" />
-              <input id="tdataInput" type="file" webkitdirectory directory multiple />
-              <button id="importTdataBtn" class="btn ghost">Импорт tdata папки</button>
-            </div>
-            <div class="row-actions">
-              <input id="accCode" placeholder="Код авторизации" />
-              <input id="accPassword" placeholder="2FA пароль (если есть)" />
-              <button id="requestCodeBtn" class="btn ghost">Запросить код</button>
-              <button id="signInBtn" class="btn">Войти</button>
-            </div>
-            <div class="row-actions">
-              <input id="msgTarget" placeholder="@username / id" />
-              <input id="msgText" placeholder="Текст сообщения" />
-              <button id="sendMessageBtn" class="btn">Отправить</button>
-              <button id="loadDialogsBtn" class="btn ghost">Диалоги</button>
-            </div>
+          <div class="card compact toolbar-row">
+            <input id="searchInput" placeholder="Поиск: username / id / source / лимиты" />
+            <button id="openFilterModal" class="btn ghost"><i class="ri-filter-3-line"></i></button>
           </div>
-
-          <div class="card filters-shell">
-            <div class="filter-top">
-              <input id="searchInput" placeholder="Поиск по имени / id / username / source" />
-              <button id="openFilterModal" class="btn ghost"><i class="ri-equalizer-2-line"></i> Фильтры</button>
-            </div>
-            <div id="statusPills" class="status-pills"></div>
-          </div>
-
+          <div class="card compact"><div id="statusPills" class="status-pills"></div></div>
           <div id="accountsList" class="accounts-vertical"></div>
           <div id="pagination" class="pagination-center"></div>
         </section>
 
         <section class="tab" data-panel="tools">
-          <div id="toolsList" class="features-vertical"></div>
+          <div class="card compact"><div id="toolsList" class="features-vertical"></div></div>
         </section>
 
         <section class="tab" data-panel="numbers">
-          <div class="card"><h3>Номера</h3><p>Интеграция API сервиса смены номера.</p></div>
+          <div class="card compact"><h3>Номера</h3><p class="muted">Интеграция API сервиса смены номера.</p></div>
         </section>
 
         <section class="tab" data-panel="settings">
-          <div class="settings-tabs card">
+          <div class="settings-tabs card compact">
             <button class="set-tab active" data-set-tab="theme"><i class="ri-palette-line"></i> Тема</button>
             <button class="set-tab" data-set-tab="api"><i class="ri-key-2-line"></i> API</button>
-            <button class="set-tab" data-set-tab="devices"><i class="ri-smartphone-line"></i> Устройства авторизации</button>
+            <button class="set-tab" data-set-tab="devices"><i class="ri-smartphone-line"></i> Устройства</button>
             <button class="set-tab" data-set-tab="tags"><i class="ri-price-tag-3-line"></i> Теги</button>
           </div>
 
-          <div class="set-panel active card" data-set-panel="theme">
-            <h3>Тема</h3>
+          <div class="set-panel active card compact" data-set-panel="theme">
             <div class="theme-pills">
-              <button class="pill active" data-theme="gray">Светло‑серая</button>
+              <button class="pill active" data-theme="gray">Серая</button>
               <button class="pill" data-theme="yellow">Желтая</button>
               <button class="pill" data-theme="blue">Голубая</button>
             </div>
           </div>
 
-          <div class="set-panel card" data-set-panel="api">
-            <h3>API настройки</h3>
-            <div class="import-grid">
-              <input id="apiId" placeholder="api_id" />
-              <input id="apiHash" placeholder="api_hash" />
-              <button id="saveApiBtn" class="btn">Сохранить API</button>
-            </div>
+          <div class="set-panel card compact" data-set-panel="api">
+            <div class="line3"><input id="apiId" placeholder="api_id" /><input id="apiHash" placeholder="api_hash" /><button id="saveApiBtn" class="btn">Сохранить</button></div>
           </div>
 
-          <div class="set-panel card" data-set-panel="devices">
-            <h3>Устройства авторизации</h3>
-            <select id="devicePresetSelect"></select>
+          <div class="set-panel card compact" data-set-panel="devices">
+            <div class="line3"><select id="devicePresetSelect"></select><button id="saveDevicePresetBtn" class="btn">Применить</button><div></div></div>
             <div id="devicePresetInfo" class="device-info"></div>
-            <button id="saveDevicePresetBtn" class="btn">Сохранить шаблон</button>
           </div>
 
-          <div class="set-panel card" data-set-panel="tags">
-            <h3>Теги</h3>
-            <div class="tag-row">
-              <input id="tagName" placeholder="Название тега" />
-              <input id="tagColor" type="color" value="#8dd17e" />
-              <button id="addTagBtn" class="btn">Добавить тег</button>
-            </div>
+          <div class="set-panel card compact" data-set-panel="tags">
+            <div class="line3"><input id="tagName" placeholder="Название тега" /><input id="tagColor" type="color" value="#8dd17e" /><button id="addTagBtn" class="btn">Добавить</button></div>
             <div id="tagList" class="tag-list"></div>
           </div>
         </section>
       </main>
 
-      <nav id="nav" class="dock card">
+      <nav id="nav" class="dock card compact">
         <button class="dock-item active" data-tab="home"><i class="ri-home-5-line"></i><span>Главная</span></button>
         <button class="dock-item" data-tab="accounts"><i class="ri-group-2-line"></i><span>Аккаунты</span></button>
         <button class="dock-item" data-tab="tools"><i class="ri-hammer-line"></i><span>Инструменты</span></button>
@@ -136,23 +97,51 @@
       </nav>
     </div>
 
+    <div id="importModal" class="modal hidden">
+      <div class="modal-box card compact">
+        <h3>Импорт</h3>
+        <div class="line3">
+          <input id="importPrefix" placeholder="Префикс (опционально)" />
+          <input id="sessionInput" type="file" multiple accept=".session" />
+          <small class="muted">Авто-импорт после выбора</small>
+        </div>
+        <div class="line3">
+          <input id="tdataName" placeholder="Имя пакета tdata" />
+          <input id="tdataInput" type="file" webkitdirectory directory multiple />
+          <small class="muted">Авто-импорт после выбора</small>
+        </div>
+        <div class="line4">
+          <input id="accCode" placeholder="Код" />
+          <input id="accPassword" placeholder="2FA пароль" />
+          <button id="requestCodeBtn" class="btn ghost">Код</button>
+          <button id="signInBtn" class="btn">Войти</button>
+        </div>
+        <div class="line4">
+          <input id="msgTarget" placeholder="@username / id" />
+          <input id="msgText" placeholder="Текст" />
+          <button id="sendMessageBtn" class="btn">Отправить</button>
+          <button id="loadDialogsBtn" class="btn ghost">Диалоги</button>
+        </div>
+      </div>
+    </div>
+
     <div id="filterModal" class="modal hidden">
-      <div class="modal-box card">
+      <div class="modal-box card compact">
         <h3>Фильтры</h3>
         <div class="filters-grid">
-          <div class="fcard"><label>Premium</label><div class="tri"><button data-f="premium:any" class="opt active">Не важно</button><button data-f="premium:no" class="opt">Нет</button><button data-f="premium:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>2FA</label><div class="tri"><button data-f="has2fa:any" class="opt active">Не важно</button><button data-f="has2fa:no" class="opt">Нет</button><button data-f="has2fa:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>Username</label><div class="tri"><button data-f="username:any" class="opt active">Не важно</button><button data-f="username:no" class="opt">Нет</button><button data-f="username:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>Авторизован</label><div class="tri"><button data-f="authorized:any" class="opt active">Не важно</button><button data-f="authorized:no" class="opt">Нет</button><button data-f="authorized:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>Источник</label><div class="tri"><button data-f="source:any" class="opt active">Не важно</button><button data-f="source:session" class="opt">session</button><button data-f="source:tdata" class="opt">tdata</button></div></div>
-          <div class="fcard"><label>Телефон</label><div class="tri"><button data-f="phone:any" class="opt active">Не важно</button><button data-f="phone:no" class="opt">Нет</button><button data-f="phone:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>Premium</label><div class="tri"><button data-f="premium:any" class="opt active">Любой</button><button data-f="premium:no" class="opt">Нет</button><button data-f="premium:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>2FA</label><div class="tri"><button data-f="has2fa:any" class="opt active">Любой</button><button data-f="has2fa:no" class="opt">Нет</button><button data-f="has2fa:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>Username</label><div class="tri"><button data-f="username:any" class="opt active">Любой</button><button data-f="username:no" class="opt">Нет</button><button data-f="username:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>Авторизован</label><div class="tri"><button data-f="authorized:any" class="opt active">Любой</button><button data-f="authorized:no" class="opt">Нет</button><button data-f="authorized:yes" class="opt">Да</button></div></div>
+          <div class="fcard"><label>Источник</label><div class="tri"><button data-f="source:any" class="opt active">Любой</button><button data-f="source:session" class="opt">session</button><button data-f="source:tdata" class="opt">tdata</button></div></div>
+          <div class="fcard"><label>Состояние</label><div class="tri"><button data-f="connection_state:any" class="opt active">Любой</button><button data-f="connection_state:connected" class="opt">Connected</button><button data-f="connection_state:error" class="opt">Error</button></div></div>
         </div>
         <button id="applyFiltersBtn" class="btn">Применить</button>
       </div>
     </div>
 
     <div id="accountModal" class="modal hidden">
-      <div class="mobile-sheet card">
+      <div class="mobile-sheet card compact">
         <div class="profile-head">
           <div class="avatar-lg" id="modalAvatar">A</div>
           <strong id="modalName">Account</strong>
@@ -167,7 +156,7 @@
             <button data-format="tdata">tdata</button>
           </div>
         </div>
-        <div class="modal-row"><button id="removeBtn" class="btn danger">Удалить аккаунт</button><button id="closeAccountModal" class="btn ghost">Закрыть</button></div>
+        <div class="line4"><button id="recheckBtn" class="btn ghost">Recheck</button><button id="removeBtn" class="btn danger">Удалить</button><button id="closeAccountModal" class="btn ghost">Закрыть</button><span></span></div>
       </div>
     </div>
 

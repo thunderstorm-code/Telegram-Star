@@ -1,26 +1,15 @@
 const $ = (id) => document.getElementById(id);
 
 const statusMap = {
-  all: 'Все',
-  clean: 'Чистые',
-  spam: 'Спамблок',
-  temp_spam: 'Временный спамблок',
-  geo_spam: 'Гео-спамблок',
-  frozen: 'Замороженные',
-  unknown: 'Неизвестные'
+  all: 'Все', clean: 'Чистые', spam: 'Спамблок', temp_spam: 'Временный спамблок',
+  geo_spam: 'Гео-спамблок', frozen: 'Замороженные', unknown: 'Неизвестные'
 };
 
 const state = {
-  accounts: [],
-  page: 1,
-  pageSize: 8,
-  status: 'all',
-  search: '',
-  selected: null,
+  accounts: [], page: 1, pageSize: 10, status: 'all', search: '', selected: null,
   tags: JSON.parse(localStorage.getItem('ts_tags') || '[]'),
-  filters: { premium: 'any', has2fa: 'any', username: 'any', authorized: 'any', source: 'any', phone: 'any' },
-  settings: null,
-  presets: []
+  filters: { premium: 'any', has2fa: 'any', username: 'any', authorized: 'any', source: 'any', connection_state: 'any' },
+  settings: null, presets: []
 };
 
 function toast(text) {
@@ -44,23 +33,22 @@ async function callEel(method, ...args) {
 function b64FromFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = String(reader.result).split(',')[1] || '';
-      resolve(base64);
-    };
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
 async function collectFiles(inputId) {
-  const input = $(inputId);
-  const files = Array.from(input.files || []);
+  const files = Array.from($(inputId).files || []);
   const result = [];
-  for (const f of files) {
-    result.push({ name: f.webkitRelativePath || f.name, data: await b64FromFile(f) });
-  }
+  for (const f of files) result.push({ name: f.webkitRelativePath || f.name, data: await b64FromFile(f) });
   return result;
+}
+
+function tabSwitch(targetTab) {
+  document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
+  document.querySelector(`.tab[data-panel="${targetTab}"]`)?.classList.add('active');
 }
 
 function bindTabs() {
@@ -68,8 +56,7 @@ function bindTabs() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.dock-item').forEach((x) => x.classList.remove('active'));
       btn.classList.add('active');
-      document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
-      document.querySelector(`.tab[data-panel="${btn.dataset.tab}"]`).classList.add('active');
+      tabSwitch(btn.dataset.tab);
     });
   });
 }
@@ -80,42 +67,37 @@ function bindSettingsTabs() {
       document.querySelectorAll('.set-tab').forEach((x) => x.classList.remove('active'));
       btn.classList.add('active');
       document.querySelectorAll('.set-panel').forEach((x) => x.classList.remove('active'));
-      document.querySelector(`.set-panel[data-set-panel="${btn.dataset.setTab}"]`).classList.add('active');
+      document.querySelector(`.set-panel[data-set-panel="${btn.dataset.setTab}"]`)?.classList.add('active');
     });
   });
 }
 
 function renderHome() {
-  const valid = state.accounts.filter((a) => a.authorized).length;
-  const spam = state.accounts.filter((a) => ['spam', 'temp_spam', 'geo_spam'].includes(a.status)).length;
-  const invalid = state.accounts.length - valid;
+  const valid = state.accounts.filter((a) => a.connection_state === 'connected').length;
+  const checking = state.accounts.filter((a) => a.connection_state === 'checking').length;
+  const issues = state.accounts.filter((a) => ['error', 'invalid', 'limited'].includes(a.connection_state)).length;
 
   $('stats').innerHTML = `
-    <article class="stat"><strong>${valid}</strong><small>Валидные</small></article>
-    <article class="stat"><strong>${spam}</strong><small>Со спамблоком</small></article>
-    <article class="stat"><strong>${invalid}</strong><small>Невалидные</small></article>`;
+    <article class="stat"><strong>${valid}</strong><small>Connected</small></article>
+    <article class="stat"><strong>${checking}</strong><small>Checking</small></article>
+    <article class="stat"><strong>${issues}</strong><small>Invalid / Limited</small></article>`;
 
   const features = [
-    ['ri-folder-upload-line', 'Импорт .session/tdata', 'Добавление аккаунтов только файлами, как вы и просили.'],
-    ['ri-key-2-line', 'Авторизация', 'Запрос кода и вход с 2FA для Telethon.'],
-    ['ri-chat-1-line', 'Сообщения', 'Отправка сообщений от выбранного аккаунта.'],
-    ['ri-message-3-line', 'Диалоги', 'Просмотр последних диалогов аккаунта.'],
-    ['ri-download-2-line', 'Экспорт', 'Выгрузка telethon / pyrogram / tdata.'],
-    ['ri-smartphone-line', 'Шаблоны устройств', '10 пресетов device_model/system/version.']
+    ['ri-upload-2-line', 'Авто-импорт', 'Выбрали файл — импорт и проверка запускаются автоматически.'],
+    ['ri-shield-check-line', 'Авто-проверка', 'После добавления идет мгновенная проверка сессии/API.'],
+    ['ri-flashlight-line', 'Минимум кликов', 'Критичные действия на первом уровне, вторичные в модалках.'],
+    ['ri-dashboard-line', 'Компактный SaaS UI', 'Сжатые отступы, быстрые анимации, clean layout.']
   ];
 
-  $('homeFeatures').innerHTML = features.map(([icon, title, text]) => `
-    <article class="feature"><i class="${icon}"></i><div><strong>${title}</strong><div>${text}</div></div></article>
-  `).join('');
-
+  $('homeFeatures').innerHTML = features.map(([icon, title, text]) => `<article class="feature"><i class="${icon}"></i><div><strong>${title}</strong><div>${text}</div></div></article>`).join('');
   $('toolsList').innerHTML = [
     ['ri-inbox-archive-line', 'Импорт/разбор аккаунтов'],
-    ['ri-shapes-line', 'Конвертер форматов'],
-    ['ri-shield-check-line', 'Проверка статусов']
+    ['ri-cpu-line', 'Мониторинг статусов'],
+    ['ri-database-2-line', 'Экспорт сессий']
   ].map(([icon, title]) => `<article class="tool-item feature"><i class="${icon}"></i><strong>${title}</strong></article>`).join('');
 }
 
-function passTriFilter(value, mode) {
+function passFilter(value, mode) {
   if (mode === 'any') return true;
   if (mode === 'yes') return Boolean(value);
   if (mode === 'no') return !value;
@@ -125,16 +107,16 @@ function passTriFilter(value, mode) {
 function filteredAccounts() {
   return state.accounts.filter((a) => {
     if (state.status !== 'all' && a.status !== state.status) return false;
-    if (!passTriFilter(a.premium, state.filters.premium)) return false;
-    if (!passTriFilter(a.has2fa, state.filters.has2fa)) return false;
-    if (!passTriFilter(Boolean(a.username), state.filters.username)) return false;
-    if (!passTriFilter(a.authorized, state.filters.authorized)) return false;
+    if (!passFilter(a.premium, state.filters.premium)) return false;
+    if (!passFilter(a.has2fa, state.filters.has2fa)) return false;
+    if (!passFilter(Boolean(a.username), state.filters.username)) return false;
+    if (!passFilter(a.authorized, state.filters.authorized)) return false;
     if (state.filters.source !== 'any' && a.source !== state.filters.source) return false;
-    if (!passTriFilter(Boolean(a.phone), state.filters.phone)) return false;
+    if (state.filters.connection_state !== 'any' && a.connection_state !== state.filters.connection_state) return false;
 
     const q = state.search.trim().toLowerCase();
     if (!q) return true;
-    return [a.name, a.phone || '', a.username || '', String(a.id || ''), a.source || ''].join(' ').toLowerCase().includes(q);
+    return [a.name, a.phone || '', a.username || '', a.source || '', a.limits || '', a.proxy || ''].join(' ').toLowerCase().includes(q);
   });
 }
 
@@ -170,9 +152,12 @@ function renderAccounts() {
     <article class="acc-item">
       <div class="acc-left">
         <div class="acc-title">${a.name}</div>
-        <div class="acc-sub">${a.phone || 'без телефона'} · ${a.username ? '@' + a.username : 'без username'} · ${a.source || 'session'}</div>
+        <div class="acc-sub">${a.username ? '@' + a.username : 'id: ' + a.name} · ${a.source || 'session'} · proxy: ${a.proxy || '—'} · limits: ${a.limits || '—'}</div>
       </div>
-      <span class="status-tag status-${a.status || 'unknown'}">${statusMap[a.status] || 'Неизвестные'}</span>
+      <div>
+        <span class="status-tag status-${a.status || 'unknown'}">${statusMap[a.status] || 'Неизвестные'}</span>
+        <span class="conn-badge cs-${a.connection_state || 'unknown'}">${a.connection_state || 'unknown'}</span>
+      </div>
       <button class="btn ghost" data-open="${a.name}">Открыть</button>
     </article>
   `).join('');
@@ -184,57 +169,58 @@ function renderAccounts() {
 async function refreshAccounts() {
   const data = await callEel('list_accounts');
   if (Array.isArray(data)) {
-    state.accounts = data.map((a) => ({
-      ...a,
-      id: a.name
-    }));
+    state.accounts = data.map((a) => ({ ...a, id: a.name }));
   }
   renderHome();
   renderStatusPills();
   renderAccounts();
 }
 
-function selectedOrFirstAccountName() {
+function selectedOrFirstName() {
   return state.selected || state.accounts[0]?.name || '';
 }
 
-function bindImportAndActions() {
-  $('importSessionBtn').addEventListener('click', async () => {
-    const files = await collectFiles('sessionInput');
-    const res = await callEel('import_session_files', $('importPrefix').value.trim(), files);
-    toast(res.ok ? `Импортировано: ${res.count}` : res.error);
-    if (res.ok) refreshAccounts();
-  });
+async function runAutoImportSession() {
+  const files = await collectFiles('sessionInput');
+  if (!files.length) return;
+  const res = await callEel('import_session_files', $('importPrefix').value.trim(), files);
+  toast(res.ok ? `Импорт: ${res.count}. Автопроверка выполнена.` : res.error);
+  if (res.ok) await refreshAccounts();
+}
 
-  $('importTdataBtn').addEventListener('click', async () => {
-    const files = await collectFiles('tdataInput');
-    const res = await callEel('import_tdata_files', $('tdataName').value.trim(), files);
-    toast(res.ok ? res.message : res.error);
-    if (res.ok) refreshAccounts();
-  });
+async function runAutoImportTdata() {
+  const files = await collectFiles('tdataInput');
+  if (!files.length) return;
+  const res = await callEel('import_tdata_files', $('tdataName').value.trim(), files);
+  toast(res.ok ? `${res.message}` : res.error);
+  if (res.ok) await refreshAccounts();
+}
+
+function bindAutomation() {
+  $('quickImportBtn').addEventListener('click', () => $('importModal').classList.remove('hidden'));
+  $('quickFilterBtn').addEventListener('click', () => $('filterModal').classList.remove('hidden'));
+
+  $('sessionInput').addEventListener('change', runAutoImportSession);
+  $('tdataInput').addEventListener('change', runAutoImportTdata);
 
   $('requestCodeBtn').addEventListener('click', async () => {
-    const name = selectedOrFirstAccountName();
-    const res = await callEel('request_code', name);
+    const res = await callEel('request_code', selectedOrFirstName());
     toast(res.ok ? 'Код отправлен' : res.error);
   });
 
   $('signInBtn').addEventListener('click', async () => {
-    const name = selectedOrFirstAccountName();
-    const res = await callEel('sign_in', name, $('accCode').value.trim(), $('accPassword').value.trim());
-    toast(res.ok ? 'Авторизация выполнена' : res.error);
-    if (res.ok) refreshAccounts();
+    const res = await callEel('sign_in', selectedOrFirstName(), $('accCode').value.trim(), $('accPassword').value.trim());
+    toast(res.ok ? 'Авторизация и проверка завершены' : res.error);
+    await refreshAccounts();
   });
 
   $('sendMessageBtn').addEventListener('click', async () => {
-    const name = selectedOrFirstAccountName();
-    const res = await callEel('send_message', name, $('msgTarget').value.trim(), $('msgText').value.trim());
+    const res = await callEel('send_message', selectedOrFirstName(), $('msgTarget').value.trim(), $('msgText').value.trim());
     toast(res.ok ? 'Сообщение отправлено' : res.error);
   });
 
   $('loadDialogsBtn').addEventListener('click', async () => {
-    const name = selectedOrFirstAccountName();
-    const res = await callEel('fetch_dialogs', name, 30);
+    const res = await callEel('fetch_dialogs', selectedOrFirstName(), 30);
     toast(res.ok ? `Диалогов: ${res.dialogs.length}` : res.error);
   });
 }
@@ -245,29 +231,36 @@ async function openAccount(name) {
   if (!res.ok) return toast(res.error);
 
   const p = res.profile;
+  const identity = p.username ? `@${p.username}` : String(p.id || 'id отсутствует');
   $('modalAvatar').textContent = (p.name || name)[0]?.toUpperCase() || 'A';
   $('modalName').textContent = p.name || name;
-  const identity = p.username ? `@${p.username}` : String(p.id || 'id отсутствует');
   $('modalIdentity').textContent = identity;
   $('modalIdentity').onclick = async () => {
     try { await navigator.clipboard.writeText(identity); } catch (_) {}
     toast('Скопировано: ' + identity);
   };
 
+  const row = state.accounts.find((a) => a.name === name) || {};
   $('modalInfo').innerHTML = `
+    <div class="meta-item"><small>Статус</small><div>${row.connection_state || 'unknown'}</div></div>
+    <div class="meta-item"><small>Лимиты</small><div>${row.limits || '—'}</div></div>
     <div class="meta-item"><small>Телефон</small><div>${p.phone || '—'}</div></div>
-    <div class="meta-item"><small>ID</small><div>${p.id || '—'}</div></div>
     <div class="meta-item"><small>Premium</small><div>${p.premium ? 'Да' : 'Нет'}</div></div>
-    <div class="meta-item"><small>Диалоги</small><div>${p.dialogs}</div></div>
-    <div class="meta-item"><small>Статус</small><div>${statusMap[p.status] || 'Неизвестные'}</div></div>
   `;
+
+  $('recheckBtn').onclick = async () => {
+    const r = await callEel('check_account', name);
+    toast(r.ok ? 'Проверка завершена' : r.error || 'Проверка с ошибкой');
+    await refreshAccounts();
+    await openAccount(name);
+  };
 
   $('removeBtn').onclick = async () => {
     const r = await callEel('remove_account', name);
     toast(r.ok ? 'Аккаунт удалён' : r.error);
     if (r.ok) {
       $('accountModal').classList.add('hidden');
-      refreshAccounts();
+      await refreshAccounts();
     }
   };
 
@@ -275,7 +268,7 @@ async function openAccount(name) {
   $('downloadMenu').querySelectorAll('[data-format]').forEach((b) => {
     b.onclick = async () => {
       const r = await callEel('export_account', name, b.dataset.format);
-      toast(r.ok ? `${r.message} | ${r.path}` : r.error);
+      toast(r.ok ? `${r.message}` : r.error);
       $('downloadMenu').classList.add('hidden');
     };
   });
@@ -289,8 +282,8 @@ function bindFilters() {
     state.page = 1;
     renderAccounts();
   });
-
   $('openFilterModal').addEventListener('click', () => $('filterModal').classList.remove('hidden'));
+
   document.querySelectorAll('[data-f]').forEach((b) => {
     b.addEventListener('click', () => {
       const [k, v] = b.dataset.f.split(':');
@@ -314,9 +307,6 @@ async function bindSettings() {
     document.body.dataset.theme = st.settings.theme || 'gray';
     $('apiId').value = st.settings.api_id || '';
     $('apiHash').value = st.settings.api_hash || '';
-    document.querySelectorAll('.theme-pills .pill').forEach((x) => x.classList.remove('active'));
-    const active = document.querySelector(`.theme-pills .pill[data-theme="${document.body.dataset.theme}"]`);
-    if (active) active.classList.add('active');
   }
 
   const p = await callEel('list_device_presets');
@@ -328,6 +318,7 @@ async function bindSettings() {
   }
 
   document.querySelectorAll('.theme-pills .pill').forEach((b) => {
+    b.classList.toggle('active', b.dataset.theme === document.body.dataset.theme);
     b.addEventListener('click', async () => {
       const theme = b.dataset.theme;
       document.body.dataset.theme = theme;
@@ -339,13 +330,13 @@ async function bindSettings() {
 
   $('saveApiBtn').addEventListener('click', async () => {
     const res = await callEel('update_settings', { api_id: $('apiId').value.trim(), api_hash: $('apiHash').value.trim() });
-    toast(res.ok ? 'API сохранён' : res.error);
+    toast(res.ok ? 'API сохранен' : res.error);
   });
 
   $('devicePresetSelect').addEventListener('change', renderPresetInfo);
   $('saveDevicePresetBtn').addEventListener('click', async () => {
     const res = await callEel('update_settings', { device_preset: $('devicePresetSelect').value });
-    toast(res.ok ? 'Шаблон устройства сохранен' : res.error);
+    toast(res.ok ? 'Шаблон сохранен' : res.error);
   });
 
   $('addTagBtn').addEventListener('click', () => {
@@ -364,31 +355,21 @@ async function bindSettings() {
 function renderPresetInfo() {
   const preset = state.presets.find((x) => x.id === $('devicePresetSelect').value) || state.presets[0];
   if (!preset) return;
-  $('devicePresetInfo').innerHTML = `
-    <div><strong>${preset.title}</strong> (${preset.category})</div>
-    <div>app_id: ${preset.app_id}</div>
-    <div>device_model: ${preset.device_model}</div>
-    <div>system_version: ${preset.system_version}</div>
-    <div>app_version: ${preset.app_version}</div>
-    <div>lang: ${preset.lang_code} / ${preset.system_lang_code}</div>
-  `;
+  $('devicePresetInfo').innerHTML = `<div><strong>${preset.title}</strong> (${preset.category})</div><div>app_id: ${preset.app_id}</div><div>device: ${preset.device_model}</div><div>system: ${preset.system_version}</div><div>app: ${preset.app_version}</div><div>lang: ${preset.lang_code}/${preset.system_lang_code}</div>`;
 }
 
 function renderTags() {
   $('tagList').innerHTML = state.tags.map((t, i) => `<button class="tag-chip" data-tag-rm="${i}" style="background:${t.color}22;color:${t.color};border-color:${t.color};">${t.name} ✕</button>`).join('');
-  $('tagList').querySelectorAll('[data-tag-rm]').forEach((b) => {
-    b.addEventListener('click', () => {
-      state.tags.splice(Number(b.dataset.tagRm), 1);
-      localStorage.setItem('ts_tags', JSON.stringify(state.tags));
-      renderTags();
-    });
-  });
+  $('tagList').querySelectorAll('[data-tag-rm]').forEach((b) => b.addEventListener('click', () => {
+    state.tags.splice(Number(b.dataset.tagRm), 1);
+    localStorage.setItem('ts_tags', JSON.stringify(state.tags));
+    renderTags();
+  }));
 }
 
 function bindModalClose() {
   $('closeAccountModal').addEventListener('click', () => $('accountModal').classList.add('hidden'));
-
-  ['filterModal', 'accountModal'].forEach((id) => {
+  ['filterModal', 'accountModal', 'importModal'].forEach((id) => {
     $(id).addEventListener('click', (e) => {
       if (e.target.id === id) $(id).classList.add('hidden');
     });
@@ -398,11 +379,14 @@ function bindModalClose() {
 async function init() {
   bindTabs();
   bindSettingsTabs();
-  bindImportAndActions();
+  bindAutomation();
   bindFilters();
   await bindSettings();
   bindModalClose();
   await refreshAccounts();
+
+  // lightweight auto-refresh for account states
+  setInterval(refreshAccounts, 8000);
 }
 
 init();
