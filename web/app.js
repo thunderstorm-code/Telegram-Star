@@ -6,13 +6,8 @@ const statusMap = {
 };
 
 const connMap = {
-  active: 'Активен',
-  checking: 'Проверка',
-  invalid: 'Невалид',
-  limited: 'Ограничен',
-  error: 'Ошибка',
-  idle: 'Ожидает',
-  unknown: 'Ожидает'
+  active: 'Активен', checking: 'Проверка', invalid: 'Невалид', limited: 'Ограничен',
+  error: 'Ошибка', idle: 'Ожидает', unknown: 'Ожидает'
 };
 
 const state = {
@@ -90,9 +85,9 @@ function renderHome() {
 
   const features = [
     ['ri-upload-2-line', 'Авто-импорт', 'Выбрали файл — импортируется автоматически.'],
-    ['ri-shield-check-line', 'Проверка по запросу', 'Подключение только при проверке/действии пользователя.'],
-    ['ri-file-list-3-line', 'Компактный список', 'Имя, @username и ID в одном ряду.'],
-    ['ri-layout-grid-line', 'Минимум лишнего', 'Вторичные функции спрятаны в окнах.']
+    ['ri-shield-check-line', 'Проверка по запросу', 'Подключение только при действии пользователя.'],
+    ['ri-file-list-3-line', 'Красивый список', 'Имя, @username и ID в одном ряду.'],
+    ['ri-layout-grid-line', 'Минимум лишнего', 'Вторичные функции спрятаны в модалках.']
   ];
 
   $('homeFeatures').innerHTML = features.map(([icon, title, text]) => `<article class="feature"><i class="${icon}"></i><div><strong>${title}</strong><div>${text}</div></div></article>`).join('');
@@ -118,8 +113,8 @@ function filteredAccounts() {
 
     const q = state.search.trim().toLowerCase();
     if (!q) return true;
-    const descriptor = `${a.username ? '@' + a.username : ''} ${a.id ? 'ID: ' + a.id : ''}`.trim();
-    return [a.display_name || a.name, descriptor, a.limits || '', a.proxy || ''].join(' ').toLowerCase().includes(q);
+    const descriptor = a.username ? `@${a.username} | ID: ${a.id || '—'}` : `ID: ${a.id || '—'}`;
+    return [a.display_name || a.name, descriptor].join(' ').toLowerCase().includes(q);
   });
 }
 
@@ -151,21 +146,26 @@ function renderAccounts() {
   $('accountsList').innerHTML = items.map((a) => {
     const desc = a.username ? `@${a.username} | ID: ${a.id || '—'}` : `ID: ${a.id || '—'}`;
     return `
-      <article class="acc-item">
+      <article class="acc-item" data-open="${a.name}">
+        <div class="acc-avatar">${(a.display_name || a.name || 'A')[0].toUpperCase()}</div>
         <div class="acc-left">
           <div class="acc-title">${a.display_name || a.name}</div>
-          <div class="acc-sub">${desc} · limits: ${a.limits || '—'} · proxy: ${a.proxy || '—'}</div>
+          <div class="acc-sub">${desc}</div>
         </div>
         <div>
           <span class="status-tag status-${a.status || 'unknown'}">${statusMap[a.status] || 'Неизвестные'}</span>
           <span class="conn-badge cs-${a.connection_state || 'unknown'}">${connMap[a.connection_state || 'unknown'] || 'Ожидает'}</span>
         </div>
-        <button class="btn ghost" data-open="${a.name}">Открыть</button>
+        <button class="btn ghost" data-open-btn="${a.name}">Открыть</button>
       </article>
     `;
   }).join('');
 
-  $('accountsList').querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', async () => openAccount(b.dataset.open)));
+  $('accountsList').querySelectorAll('[data-open],[data-open-btn]').forEach((el) => el.addEventListener('click', async (e) => {
+    const name = e.currentTarget.dataset.open || e.currentTarget.dataset.openBtn;
+    await openAccount(name);
+  }));
+
   renderPagination(list.length);
 }
 
@@ -211,23 +211,42 @@ function bindAutomation() {
     $('authModal').classList.remove('hidden');
   });
 
-  $('requestCodeBtn').addEventListener('click', async () => {
-    const res = await callEel('request_code', selectedOrFirstName());
+  $('startRegBtn').addEventListener('click', async () => {
+    const res = await callEel('register_account_start', $('regSessionName').value.trim(), $('regPhone').value.trim());
     toast(res.ok ? 'Код отправлен' : res.error);
   });
 
+  $('requestCodeBtn').addEventListener('click', async () => {
+    const res = await callEel('register_account_start', $('regSessionName').value.trim(), $('regPhone').value.trim());
+    toast(res.ok ? 'Код отправлен повторно' : res.error);
+  });
+
   $('signInBtn').addEventListener('click', async () => {
-    const res = await callEel('sign_in', selectedOrFirstName(), $('accCode').value.trim(), $('accPassword').value.trim());
+    const sessionName = $('regSessionName').value.trim() || selectedOrFirstName();
+    const res = await callEel('register_account_finish', sessionName, $('accCode').value.trim(), $('accPassword').value.trim());
     if (res.need_password) {
       $('passwordWrap').classList.remove('hidden');
       toast('Нужен пароль 2FA');
       return;
     }
-    toast(res.ok ? 'Вход выполнен' : res.error);
-    if (res.ok) {
-      $('authModal').classList.add('hidden');
-      $('passwordWrap').classList.add('hidden');
+    if (!res.ok) {
+      const fallback = await callEel('sign_in', selectedOrFirstName(), $('accCode').value.trim(), $('accPassword').value.trim());
+      if (fallback.need_password) {
+        $('passwordWrap').classList.remove('hidden');
+        toast('Нужен пароль 2FA');
+        return;
+      }
+      toast(fallback.ok ? 'Вход выполнен' : fallback.error);
+      if (fallback.ok) {
+        $('authModal').classList.add('hidden');
+        $('passwordWrap').classList.add('hidden');
+      }
+      await refreshAccounts();
+      return;
     }
+    toast('Сессия зарегистрирована');
+    $('authModal').classList.add('hidden');
+    $('passwordWrap').classList.add('hidden');
     await refreshAccounts();
   });
 
@@ -239,8 +258,16 @@ function bindAutomation() {
 
 async function openAccount(name) {
   state.selected = name;
+  $('modalName').textContent = name;
+  $('modalIdentity').textContent = 'Загрузка...';
+  $('modalInfo').innerHTML = '<div class="modal-loading">Загрузка профиля...</div>';
+  $('accountModal').classList.remove('hidden');
+
   const res = await callEel('get_account_profile', name);
-  if (!res.ok) return toast(res.error);
+  if (!res.ok) {
+    toast(res.error);
+    return;
+  }
 
   const p = res.profile;
   const identity = p.username ? `@${p.username}` : `ID: ${p.id || '—'}`;
@@ -255,9 +282,9 @@ async function openAccount(name) {
   const row = state.accounts.find((a) => a.name === name) || {};
   $('modalInfo').innerHTML = `
     <div class="meta-item"><small>Состояние</small><div>${connMap[row.connection_state || 'unknown'] || 'Ожидает'}</div></div>
-    <div class="meta-item"><small>Лимиты</small><div>${row.limits || '—'}</div></div>
     <div class="meta-item"><small>Телефон</small><div>${p.phone || '—'}</div></div>
     <div class="meta-item"><small>Premium</small><div>${p.premium ? 'Да' : 'Нет'}</div></div>
+    <div class="meta-item"><small>ID</small><div>${p.id || '—'}</div></div>
   `;
 
   $('recheckBtn').onclick = async () => {
@@ -284,8 +311,6 @@ async function openAccount(name) {
       $('downloadMenu').classList.add('hidden');
     };
   });
-
-  $('accountModal').classList.remove('hidden');
 }
 
 function bindFilters() {

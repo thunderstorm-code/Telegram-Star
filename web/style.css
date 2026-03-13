@@ -47,14 +47,15 @@ button:hover,.btn:hover { border-color: color-mix(in oklab,var(--accent) 45%,whi
 .pill-s.active,.pill.active,.set-tab.active { border-color: var(--accent); color: var(--accent-soft); }
 
 .accounts-vertical { display: grid; grid-template-columns: 1fr; gap: 6px; }
-.acc-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; }
+.acc-item { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; }
 .acc-left { display: grid; gap: 2px; }
+.acc-avatar { width: 34px; height: 34px; border-radius: 10px; display:grid; place-items:center; font-weight:800; background: color-mix(in oklab, var(--accent) 28%, #2b2d31 72%); border:1px solid var(--line); }
 .acc-title { font-size: 14px; font-weight: 800; }
 .acc-sub { color: var(--muted); font-size: 11px; }
 .status-tag { border-radius: 999px; padding: 5px 8px; font-size: 11px; font-weight: 700; color: #fff; }
 .conn-badge { border-radius: 999px; padding: 4px 7px; font-size: 10px; border: 1px solid var(--line); margin-left: 4px; }
 
-.pagination-center { display: flex; justify-content: center; gap: 6px; }
+.pagination-center { display: flex; justify-content: center; gap: 6px; margin-top: 18px; }
 .pg { width: 32px; height: 32px; padding: 0; border-radius: 9px; }
 .pg.active { border-color: var(--accent); }
 
@@ -121,3 +122,6 @@ button:hover,.btn:hover { border-color: color-mix(in oklab,var(--accent) 45%,whi
   .stats,.filters-grid,.line3,.line4,.toolbar-row { grid-template-columns: 1fr; }
   .acc-item { grid-template-columns: 1fr; }
 }
+
+
+.modal-loading{color:var(--muted);font-size:12px;text-align:center;padding:8px;}

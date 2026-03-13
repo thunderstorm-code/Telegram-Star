@@ -25,6 +25,7 @@ IMPORTS_DIR.mkdir(exist_ok=True)
 
 accounts: Dict[str, Dict[str, Any]] = {}
 clients: Dict[str, TelegramClient] = {}
+pending_registrations: Dict[str, Dict[str, Any]] = {}
 app_settings: Dict[str, Any] = {}
 
 LOOP = asyncio.new_event_loop()
@@ -302,6 +303,108 @@ def import_tdata_files(bundle_name: str, files: List[Dict[str, str]]) -> Dict[st
 
     save_accounts()
     return {"ok": True, "message": "tdata импортирована", "imported": imported, "skipped": skipped, "path": str(root)}
+
+
+
+
+@eel.expose
+def register_account_start(session_name: str, phone: str) -> Dict[str, Any]:
+    async def _start() -> Dict[str, Any]:
+        try:
+            name = (session_name or '').strip()
+            if not name:
+                return {"ok": False, "error": "Укажите имя сессии"}
+            if not phone:
+                return {"ok": False, "error": "Укажите номер телефона"}
+            if name in accounts:
+                return {"ok": False, "error": "Сессия с таким именем уже существует"}
+
+            preset = get_preset(app_settings.get("device_preset", DEVICE_PRESETS[0]["id"]))
+            api_id = app_settings.get("api_id") or str(preset["app_id"])
+            api_hash = app_settings.get("api_hash") or preset["app_hash"]
+            if not api_id or not api_hash:
+                return {"ok": False, "error": "Заполните API в настройках"}
+
+            cfg = {
+                "api_id": int(api_id),
+                "api_hash": api_hash,
+                "device_model": preset["device_model"],
+                "system_version": preset["system_version"],
+                "app_version": preset["app_version"],
+                "lang_code": preset["lang_code"],
+                "system_lang_code": preset["system_lang_code"],
+            }
+
+            session_path = SESSIONS_DIR / f"{name}.session"
+            client = TelegramClient(
+                str(session_path), cfg["api_id"], cfg["api_hash"],
+                device_model=cfg["device_model"], system_version=cfg["system_version"],
+                app_version=cfg["app_version"], lang_code=cfg["lang_code"], system_lang_code=cfg["system_lang_code"],
+            )
+            await client.connect()
+            await client.send_code_request(phone)
+            pending_registrations[name] = {"phone": phone}
+            clients[name] = client
+            return {"ok": True, "message": "Код отправлен"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    return run_async(_start())
+
+
+@eel.expose
+def register_account_finish(session_name: str, code: str, password: str = "") -> Dict[str, Any]:
+    async def _finish() -> Dict[str, Any]:
+        try:
+            name = (session_name or '').strip()
+            if name not in pending_registrations:
+                return {"ok": False, "error": "Сначала запросите код"}
+
+            client = await ensure_client(name) if name in accounts else clients.get(name)
+            if not client:
+                return {"ok": False, "error": "Клиент не инициализирован"}
+
+            phone = pending_registrations[name]["phone"]
+            try:
+                await client.sign_in(phone=phone, code=code)
+            except SessionPasswordNeededError:
+                if not password:
+                    return {"ok": False, "need_password": True, "error": "Нужен пароль 2FA"}
+                await client.sign_in(password=password)
+
+            me = await client.get_me()
+            session_file = SESSIONS_DIR / f"{name}.session"
+            h = hashlib.sha256(session_file.read_bytes()).hexdigest() if session_file.exists() else ''
+            if session_hash_exists(h):
+                await client.disconnect()
+                clients.pop(name, None)
+                pending_registrations.pop(name, None)
+                return {"ok": False, "error": "Такая сессия уже загружена"}
+
+            accounts[name] = {
+                "api_id": app_settings.get("api_id", ""),
+                "api_hash": app_settings.get("api_hash", ""),
+                "phone": phone,
+                "authorized": True,
+                "status": "clean",
+                "source": "registered",
+                "connection_state": "active",
+                "active": True,
+                "limits": "ok",
+                "proxy": "—",
+                "session_hash": h,
+                "profile_name": (f"{me.first_name or ''} {me.last_name or ''}").strip() or (me.username or name),
+                "profile_id": str(me.id),
+                "username": me.username or "",
+                "premium": bool(getattr(me, "premium", False)),
+            }
+            save_accounts()
+            pending_registrations.pop(name, None)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    return run_async(_finish())
 
 
 @eel.expose

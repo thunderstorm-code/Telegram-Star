@@ -118,8 +118,9 @@
     <div id="authModal" class="modal hidden">
       <div class="auth-sheet card compact">
         <h3>Вход в Telegram</h3>
-        <p class="muted">Выберите аккаунт в списке и введите код. Поле пароля появится только при необходимости.</p>
-        <div class="line3"><input id="accCode" placeholder="Код из Telegram" /><button id="requestCodeBtn" class="btn ghost">Получить код</button><button id="signInBtn" class="btn">Продолжить</button></div>
+        <p class="muted">Создайте новую сессию как в окне регистрации Telegram.</p>
+        <div class="line3"><input id="regSessionName" placeholder="Имя новой сессии" /><input id="regPhone" placeholder="Номер телефона +7..." /><button id="startRegBtn" class="btn">Отправить код</button></div>
+        <div class="line3"><input id="accCode" placeholder="Код из Telegram" /><button id="requestCodeBtn" class="btn ghost">Повторно код</button><button id="signInBtn" class="btn">Продолжить</button></div>
         <div id="passwordWrap" class="hidden"><input id="accPassword" placeholder="Пароль 2FA" /></div>
         <div class="line3"><input id="msgTarget" placeholder="@username / ID" /><input id="msgText" placeholder="Текст" /><button id="sendMessageBtn" class="btn">Отправить</button></div>
       </div>
