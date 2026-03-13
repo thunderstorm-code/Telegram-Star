@@ -1,5 +1,7 @@
 import asyncio
 import json
+import shutil
+import zipfile
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -10,8 +12,10 @@ from telethon.errors import SessionPasswordNeededError
 BASE_DIR = Path(__file__).parent
 DATA_FILE = BASE_DIR / "accounts.json"
 SESSIONS_DIR = BASE_DIR / "sessions"
+EXPORTS_DIR = BASE_DIR / "exports"
 
 SESSIONS_DIR.mkdir(exist_ok=True)
+EXPORTS_DIR.mkdir(exist_ok=True)
 
 accounts: Dict[str, Dict[str, Any]] = {}
 clients: Dict[str, TelegramClient] = {}
@@ -56,6 +60,7 @@ def list_accounts() -> List[Dict[str, Any]]:
                 "name": name,
                 "phone": data.get("phone"),
                 "authorized": data.get("authorized", False),
+                "status": data.get("status", "clean" if data.get("authorized") else "unknown"),
             }
         )
     return result
@@ -74,7 +79,18 @@ def add_account(name: str, api_id: str, api_hash: str, phone: str) -> Dict[str, 
         "api_hash": api_hash,
         "phone": phone,
         "authorized": False,
+        "status": "unknown",
+        "custom_tags": [],
     }
+    save_accounts()
+    return {"ok": True}
+
+
+@eel.expose
+def set_account_status(name: str, status: str) -> Dict[str, Any]:
+    if name not in accounts:
+        return {"ok": False, "error": "Аккаунт не найден"}
+    accounts[name]["status"] = status
     save_accounts()
     return {"ok": True}
 
@@ -126,6 +142,8 @@ def sign_in(name: str, code: str, password: str = "") -> Dict[str, Any]:
                 await client.sign_in(password=password)
 
             accounts[name]["authorized"] = await client.is_user_authorized()
+            if accounts[name]["authorized"] and accounts[name].get("status") == "unknown":
+                accounts[name]["status"] = "clean"
             save_accounts()
             return {"ok": True, "authorized": accounts[name]["authorized"]}
         except Exception as e:
@@ -159,6 +177,51 @@ def fetch_dialogs(name: str, limit: int = 30) -> Dict[str, Any]:
 
 
 @eel.expose
+def get_account_profile(name: str) -> Dict[str, Any]:
+    async def _profile() -> Dict[str, Any]:
+        try:
+            client = await ensure_client(name)
+            auth = await client.is_user_authorized()
+            if not auth:
+                return {
+                    "ok": True,
+                    "profile": {
+                        "name": name,
+                        "phone": accounts[name].get("phone", "—"),
+                        "username": "",
+                        "id": "—",
+                        "premium": False,
+                        "status": accounts[name].get("status", "unknown"),
+                        "dialogs": 0,
+                        "authorized": False,
+                    },
+                }
+
+            me = await client.get_me()
+            dialogs_count = 0
+            async for _ in client.iter_dialogs(limit=200):
+                dialogs_count += 1
+
+            return {
+                "ok": True,
+                "profile": {
+                    "name": (f"{me.first_name or ''} {me.last_name or ''}").strip() or name,
+                    "phone": f"+{me.phone}" if me.phone else accounts[name].get("phone", "—"),
+                    "username": me.username or "",
+                    "id": me.id,
+                    "premium": bool(getattr(me, "premium", False)),
+                    "status": accounts[name].get("status", "clean"),
+                    "dialogs": dialogs_count,
+                    "authorized": True,
+                },
+            }
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    return asyncio.run(_profile())
+
+
+@eel.expose
 def send_message(name: str, target: str, text: str) -> Dict[str, Any]:
     async def _send() -> Dict[str, Any]:
         try:
@@ -177,7 +240,45 @@ def send_message(name: str, target: str, text: str) -> Dict[str, Any]:
     return asyncio.run(_send())
 
 
+@eel.expose
+def export_account(name: str, fmt: str) -> Dict[str, Any]:
+    if name not in accounts:
+        return {"ok": False, "error": "Аккаунт не найден"}
+
+    session_file = SESSIONS_DIR / f"{name}.session"
+    if not session_file.exists():
+        return {"ok": False, "error": "Сессия не найдена. Сначала авторизуйте аккаунт"}
+
+    fmt = (fmt or "").lower()
+    safe_name = "".join(c for c in name if c.isalnum() or c in ("-", "_")) or "account"
+
+    try:
+        if fmt in {"telethon", "pyrogram"}:
+            target = EXPORTS_DIR / f"{safe_name}_{fmt}.session"
+            shutil.copy2(session_file, target)
+            return {"ok": True, "path": str(target), "message": f"Экспорт готов: {target.name}"}
+
+        if fmt == "tdata":
+            archive = EXPORTS_DIR / f"{safe_name}_tdata.zip"
+            with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(session_file, arcname=f"{safe_name}.session")
+                meta = {
+                    "name": name,
+                    "phone": accounts[name].get("phone"),
+                    "note": "Demo export bundle. Real tdata conversion requires dedicated converter.",
+                }
+                meta_file = EXPORTS_DIR / f"{safe_name}_meta.json"
+                meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+                zf.write(meta_file, arcname="meta.json")
+                meta_file.unlink(missing_ok=True)
+            return {"ok": True, "path": str(archive), "message": f"Экспорт готов: {archive.name}"}
+
+        return {"ok": False, "error": "Неизвестный формат экспорта"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 if __name__ == "__main__":
     load_accounts()
     eel.init("web")
-    eel.start("index.html", size=(1300, 860), port=8000)
+    eel.start("index.html", size=(1380, 900), port=8000)
