@@ -21,26 +21,18 @@
             <p>Automated Combiner</p>
           </div>
         </div>
-        <div class="top-actions">
-          <button id="quickImportBtn" class="btn"><i class="ri-upload-2-line"></i> Импорт</button>
-          <button id="quickFilterBtn" class="btn ghost"><i class="ri-equalizer-2-line"></i></button>
-        </div>
       </header>
 
       <main class="main">
         <section class="tab active" data-panel="home">
-          <div class="card compact">
-            <div class="stats" id="stats"></div>
-          </div>
-          <div class="card compact">
-            <h3>Функции</h3>
-            <div id="homeFeatures" class="features-vertical"></div>
-          </div>
+          <div class="card compact"><div class="stats" id="stats"></div></div>
+          <div class="card compact"><h3>Функции</h3><div id="homeFeatures" class="features-vertical"></div></div>
         </section>
 
         <section class="tab" data-panel="accounts">
           <div class="card compact toolbar-row">
-            <input id="searchInput" placeholder="Поиск: username / id / source / лимиты" />
+            <input id="searchInput" placeholder="Поиск: имя / @username / ID / лимиты" />
+            <button id="openImportModal" class="btn"><i class="ri-upload-2-line"></i> Импорт</button>
             <button id="openFilterModal" class="btn ghost"><i class="ri-filter-3-line"></i></button>
           </div>
           <div class="card compact"><div id="statusPills" class="status-pills"></div></div>
@@ -99,29 +91,37 @@
 
     <div id="importModal" class="modal hidden">
       <div class="modal-box card compact">
-        <h3>Импорт</h3>
-        <div class="line3">
-          <input id="importPrefix" placeholder="Префикс (опционально)" />
-          <input id="sessionInput" type="file" multiple accept=".session" />
-          <small class="muted">Авто-импорт после выбора</small>
+        <h3>Импорт аккаунтов</h3>
+
+        <div class="import-card">
+          <div class="line3">
+            <input id="importPrefix" placeholder="Префикс (опционально)" />
+            <label class="file-btn" for="sessionInput"><i class="ri-file-upload-line"></i> Выбрать .session</label>
+            <small class="muted">Импорт начнется автоматически</small>
+          </div>
+          <input id="sessionInput" class="file-hidden" type="file" multiple accept=".session" />
         </div>
-        <div class="line3">
-          <input id="tdataName" placeholder="Имя пакета tdata" />
-          <input id="tdataInput" type="file" webkitdirectory directory multiple />
-          <small class="muted">Авто-импорт после выбора</small>
+
+        <div class="import-card">
+          <div class="line3">
+            <input id="tdataName" placeholder="Имя пакета tdata" />
+            <label class="file-btn" for="tdataInput"><i class="ri-folder-open-line"></i> Выбрать папку tdata</label>
+            <small class="muted">Импорт начнется автоматически</small>
+          </div>
+          <input id="tdataInput" class="file-hidden" type="file" webkitdirectory directory multiple />
         </div>
-        <div class="line4">
-          <input id="accCode" placeholder="Код" />
-          <input id="accPassword" placeholder="2FA пароль" />
-          <button id="requestCodeBtn" class="btn ghost">Код</button>
-          <button id="signInBtn" class="btn">Войти</button>
-        </div>
-        <div class="line4">
-          <input id="msgTarget" placeholder="@username / id" />
-          <input id="msgText" placeholder="Текст" />
-          <button id="sendMessageBtn" class="btn">Отправить</button>
-          <button id="loadDialogsBtn" class="btn ghost">Диалоги</button>
-        </div>
+
+        <button id="openAuthModal" class="btn ghost"><i class="ri-lock-password-line"></i> Ручной вход (как окно регистрации)</button>
+      </div>
+    </div>
+
+    <div id="authModal" class="modal hidden">
+      <div class="auth-sheet card compact">
+        <h3>Вход в Telegram</h3>
+        <p class="muted">Выберите аккаунт в списке и введите код. Поле пароля появится только при необходимости.</p>
+        <div class="line3"><input id="accCode" placeholder="Код из Telegram" /><button id="requestCodeBtn" class="btn ghost">Получить код</button><button id="signInBtn" class="btn">Продолжить</button></div>
+        <div id="passwordWrap" class="hidden"><input id="accPassword" placeholder="Пароль 2FA" /></div>
+        <div class="line3"><input id="msgTarget" placeholder="@username / ID" /><input id="msgText" placeholder="Текст" /><button id="sendMessageBtn" class="btn">Отправить</button></div>
       </div>
     </div>
 
@@ -131,10 +131,6 @@
         <div class="filters-grid">
           <div class="fcard"><label>Premium</label><div class="tri"><button data-f="premium:any" class="opt active">Любой</button><button data-f="premium:no" class="opt">Нет</button><button data-f="premium:yes" class="opt">Да</button></div></div>
           <div class="fcard"><label>2FA</label><div class="tri"><button data-f="has2fa:any" class="opt active">Любой</button><button data-f="has2fa:no" class="opt">Нет</button><button data-f="has2fa:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>Username</label><div class="tri"><button data-f="username:any" class="opt active">Любой</button><button data-f="username:no" class="opt">Нет</button><button data-f="username:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>Авторизован</label><div class="tri"><button data-f="authorized:any" class="opt active">Любой</button><button data-f="authorized:no" class="opt">Нет</button><button data-f="authorized:yes" class="opt">Да</button></div></div>
-          <div class="fcard"><label>Источник</label><div class="tri"><button data-f="source:any" class="opt active">Любой</button><button data-f="source:session" class="opt">session</button><button data-f="source:tdata" class="opt">tdata</button></div></div>
-          <div class="fcard"><label>Состояние</label><div class="tri"><button data-f="connection_state:any" class="opt active">Любой</button><button data-f="connection_state:connected" class="opt">Connected</button><button data-f="connection_state:error" class="opt">Error</button></div></div>
         </div>
         <button id="applyFiltersBtn" class="btn">Применить</button>
       </div>
@@ -156,7 +152,7 @@
             <button data-format="tdata">tdata</button>
           </div>
         </div>
-        <div class="line4"><button id="recheckBtn" class="btn ghost">Recheck</button><button id="removeBtn" class="btn danger">Удалить</button><button id="closeAccountModal" class="btn ghost">Закрыть</button><span></span></div>
+        <div class="line4"><button id="recheckBtn" class="btn ghost">Проверить</button><button id="removeBtn" class="btn danger">Удалить</button><button id="closeAccountModal" class="btn ghost">Закрыть</button><span></span></div>
       </div>
     </div>
 

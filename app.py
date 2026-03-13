@@ -1,7 +1,9 @@
 import asyncio
 import base64
+import hashlib
 import json
 import shutil
+import threading
 import zipfile
 from pathlib import Path
 from typing import Dict, Any, List
@@ -24,6 +26,14 @@ IMPORTS_DIR.mkdir(exist_ok=True)
 accounts: Dict[str, Dict[str, Any]] = {}
 clients: Dict[str, TelegramClient] = {}
 app_settings: Dict[str, Any] = {}
+
+LOOP = asyncio.new_event_loop()
+threading.Thread(target=LOOP.run_forever, daemon=True).start()
+
+
+def run_async(coro):
+    return asyncio.run_coroutine_threadsafe(coro, LOOP).result()
+
 
 DEVICE_PRESETS = [
     {"id": "tdesktop_pc", "title": "TDesktop", "category": "pc", "app_id": 2040, "app_hash": "b18441a1ff607e10a989891a5462e627", "device_model": "Windows PC", "system_version": "Windows 11", "app_version": "4.16", "lang_code": "ru", "system_lang_code": "ru-RU"},
@@ -91,6 +101,7 @@ def resolve_client_params(account_name: str) -> Dict[str, Any]:
 async def ensure_client(account_name: str) -> TelegramClient:
     if account_name not in accounts:
         raise ValueError("Аккаунт не найден")
+
     if account_name in clients:
         client = clients[account_name]
         if not client.is_connected():
@@ -107,6 +118,10 @@ async def ensure_client(account_name: str) -> TelegramClient:
     await client.connect()
     clients[account_name] = client
     return client
+
+
+def session_hash_exists(hash_value: str) -> bool:
+    return any(acc.get("session_hash") == hash_value for acc in accounts.values())
 
 
 async def _check_account_async(name: str) -> Dict[str, Any]:
@@ -127,8 +142,10 @@ async def _check_account_async(name: str) -> Dict[str, Any]:
         if auth:
             me = await client.get_me()
             accounts[name]["username"] = me.username or ""
+            accounts[name]["profile_id"] = str(me.id)
+            accounts[name]["profile_name"] = (f"{me.first_name or ''} {me.last_name or ''}").strip() or (me.username or name)
             accounts[name]["premium"] = bool(getattr(me, "premium", False))
-            accounts[name]["connection_state"] = "connected"
+            accounts[name]["connection_state"] = "active"
             if accounts[name].get("status", "unknown") == "unknown":
                 accounts[name]["status"] = "clean"
         else:
@@ -152,13 +169,9 @@ async def _check_account_async(name: str) -> Dict[str, Any]:
         return {"ok": False, "state": "error", "error": str(e)}
 
 
-def check_account_now(name: str) -> Dict[str, Any]:
-    return asyncio.run(_check_account_async(name))
-
-
 @eel.expose
 def check_account(name: str) -> Dict[str, Any]:
-    return check_account_now(name)
+    return run_async(_check_account_async(name))
 
 
 @eel.expose
@@ -166,6 +179,8 @@ def list_accounts() -> List[Dict[str, Any]]:
     return [
         {
             "name": name,
+            "display_name": data.get("profile_name") or name,
+            "id": data.get("profile_id", ""),
             "phone": data.get("phone"),
             "authorized": data.get("authorized", False),
             "status": data.get("status", "unknown"),
@@ -207,32 +222,37 @@ def import_session_files(prefix: str, files: List[Dict[str, str]]) -> Dict[str, 
     if not files:
         return {"ok": False, "error": "Файлы не переданы"}
 
-    imported = []
+    imported, skipped = [], []
     for item in files:
         fname = item.get("name", "")
         if not fname.endswith(".session"):
             continue
+
+        raw = base64.b64decode(item.get("data", ""))
+        h = hashlib.sha256(raw).hexdigest()
+        if session_hash_exists(h):
+            skipped.append(fname)
+            continue
+
         stem = Path(fname).stem
         account_name = f"{prefix}_{stem}" if prefix else stem
         account_name = "".join(c for c in account_name if c.isalnum() or c in ("-", "_"))
         if not account_name:
             continue
+        while account_name in accounts:
+            account_name += "_new"
 
-        target = SESSIONS_DIR / f"{account_name}.session"
-        target.write_bytes(base64.b64decode(item.get("data", "")))
-
-        accounts.setdefault(account_name, {})
-        accounts[account_name].update({
+        (SESSIONS_DIR / f"{account_name}.session").write_bytes(raw)
+        accounts[account_name] = {
             "api_id": app_settings.get("api_id", ""), "api_hash": app_settings.get("api_hash", ""),
-            "phone": accounts[account_name].get("phone", ""), "authorized": False,
-            "status": accounts[account_name].get("status", "unknown"), "source": "session",
-            "connection_state": "checking", "active": False, "limits": "checking", "proxy": "—",
-        })
+            "phone": "", "authorized": False, "status": "unknown", "source": "session",
+            "connection_state": "idle", "active": False, "limits": "—", "proxy": "—", "session_hash": h,
+            "profile_name": account_name, "profile_id": "", "username": "",
+        }
         imported.append(account_name)
 
     save_accounts()
-    results = [check_account_now(name) for name in imported]
-    return {"ok": True, "count": len(imported), "accounts": imported, "checks": results}
+    return {"ok": True, "count": len(imported), "accounts": imported, "skipped": skipped}
 
 
 @eel.expose
@@ -256,23 +276,32 @@ def import_tdata_files(bundle_name: str, files: List[Dict[str, str]]) -> Dict[st
         if out.suffix == ".session":
             session_like.append(out)
 
-    imported = []
+    imported, skipped = [], []
     for s in session_like:
+        raw = s.read_bytes()
+        h = hashlib.sha256(raw).hexdigest()
+        if session_hash_exists(h):
+            skipped.append(s.name)
+            continue
+
         account_name = f"{bundle_name}_{s.stem}" if bundle_name else s.stem
         account_name = "".join(c for c in account_name if c.isalnum() or c in ("-", "_"))
         if not account_name:
             continue
+        while account_name in accounts:
+            account_name += "_new"
+
         shutil.copy2(s, SESSIONS_DIR / f"{account_name}.session")
         accounts[account_name] = {
             "api_id": app_settings.get("api_id", ""), "api_hash": app_settings.get("api_hash", ""),
             "phone": "", "authorized": False, "status": "unknown", "source": "tdata",
-            "connection_state": "checking", "active": False, "limits": "checking", "proxy": "—",
+            "connection_state": "idle", "active": False, "limits": "—", "proxy": "—", "session_hash": h,
+            "profile_name": account_name, "profile_id": "", "username": "",
         }
         imported.append(account_name)
 
     save_accounts()
-    results = [check_account_now(name) for name in imported]
-    return {"ok": True, "message": "tdata импортирована; .session проверены автоматически", "imported": imported, "checks": results, "path": str(root)}
+    return {"ok": True, "message": "tdata импортирована", "imported": imported, "skipped": skipped, "path": str(root)}
 
 
 @eel.expose
@@ -289,6 +318,17 @@ def remove_account(name: str) -> Dict[str, Any]:
     if name not in accounts:
         return {"ok": False, "error": "Аккаунт не найден"}
 
+    async def _remove() -> Dict[str, Any]:
+        client = clients.pop(name, None)
+        if client:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+        return {"ok": True}
+
+    run_async(_remove())
+
     accounts.pop(name, None)
     save_accounts()
 
@@ -296,9 +336,6 @@ def remove_account(name: str) -> Dict[str, Any]:
     if session_file.exists():
         session_file.unlink()
 
-    client = clients.pop(name, None)
-    if client:
-        asyncio.run(client.disconnect())
     return {"ok": True}
 
 
@@ -315,7 +352,7 @@ def request_code(name: str) -> Dict[str, Any]:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    return asyncio.run(_request())
+    return run_async(_request())
 
 
 @eel.expose
@@ -329,16 +366,15 @@ def sign_in(name: str, code: str, password: str = "") -> Dict[str, Any]:
                     await client.sign_in(phone=phone, code=code)
                 except SessionPasswordNeededError:
                     if not password:
-                        return {"ok": False, "error": "Нужен пароль 2FA"}
+                        return {"ok": False, "need_password": True, "error": "Нужен пароль 2FA"}
                     await client.sign_in(password=password)
             elif password:
                 await client.sign_in(password=password)
-
             return await _check_account_async(name)
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    return asyncio.run(_sign_in())
+    return run_async(_sign_in())
 
 
 @eel.expose
@@ -355,7 +391,7 @@ def fetch_dialogs(name: str, limit: int = 30) -> Dict[str, Any]:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    return asyncio.run(_fetch())
+    return run_async(_fetch())
 
 
 @eel.expose
@@ -366,8 +402,9 @@ def get_account_profile(name: str) -> Dict[str, Any]:
             auth = await client.is_user_authorized()
             if not auth:
                 return {"ok": True, "profile": {
-                    "name": name, "phone": accounts[name].get("phone", "—"), "username": accounts[name].get("username", ""),
-                    "id": "—", "premium": accounts[name].get("premium", False), "status": accounts[name].get("status", "unknown"),
+                    "name": accounts[name].get("profile_name", name), "phone": accounts[name].get("phone", "—"),
+                    "username": accounts[name].get("username", ""), "id": accounts[name].get("profile_id", "—"),
+                    "premium": accounts[name].get("premium", False), "status": accounts[name].get("status", "unknown"),
                     "dialogs": 0, "authorized": False,
                 }}
 
@@ -376,15 +413,15 @@ def get_account_profile(name: str) -> Dict[str, Any]:
             async for _ in client.iter_dialogs(limit=200):
                 dialogs_count += 1
             return {"ok": True, "profile": {
-                "name": (f"{me.first_name or ''} {me.last_name or ''}").strip() or name,
+                "name": (f"{me.first_name or ''} {me.last_name or ''}").strip() or accounts[name].get("profile_name", name),
                 "phone": f"+{me.phone}" if me.phone else accounts[name].get("phone", "—"),
-                "username": me.username or "", "id": me.id, "premium": bool(getattr(me, "premium", False)),
+                "username": me.username or "", "id": str(me.id), "premium": bool(getattr(me, "premium", False)),
                 "status": accounts[name].get("status", "clean"), "dialogs": dialogs_count, "authorized": True,
             }}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    return asyncio.run(_profile())
+    return run_async(_profile())
 
 
 @eel.expose
@@ -401,13 +438,14 @@ def send_message(name: str, target: str, text: str) -> Dict[str, Any]:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    return asyncio.run(_send())
+    return run_async(_send())
 
 
 @eel.expose
 def export_account(name: str, fmt: str) -> Dict[str, Any]:
     if name not in accounts:
         return {"ok": False, "error": "Аккаунт не найден"}
+
     session_file = SESSIONS_DIR / f"{name}.session"
     if not session_file.exists():
         return {"ok": False, "error": "Сессия не найдена"}

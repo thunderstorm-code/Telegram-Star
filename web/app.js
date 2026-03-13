@@ -5,10 +5,20 @@ const statusMap = {
   geo_spam: 'Гео-спамблок', frozen: 'Замороженные', unknown: 'Неизвестные'
 };
 
+const connMap = {
+  active: 'Активен',
+  checking: 'Проверка',
+  invalid: 'Невалид',
+  limited: 'Ограничен',
+  error: 'Ошибка',
+  idle: 'Ожидает',
+  unknown: 'Ожидает'
+};
+
 const state = {
   accounts: [], page: 1, pageSize: 10, status: 'all', search: '', selected: null,
   tags: JSON.parse(localStorage.getItem('ts_tags') || '[]'),
-  filters: { premium: 'any', has2fa: 'any', username: 'any', authorized: 'any', source: 'any', connection_state: 'any' },
+  filters: { premium: 'any', has2fa: 'any' },
   settings: null, presets: []
 };
 
@@ -46,17 +56,13 @@ async function collectFiles(inputId) {
   return result;
 }
 
-function tabSwitch(targetTab) {
-  document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
-  document.querySelector(`.tab[data-panel="${targetTab}"]`)?.classList.add('active');
-}
-
 function bindTabs() {
   $('nav').querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.dock-item').forEach((x) => x.classList.remove('active'));
       btn.classList.add('active');
-      tabSwitch(btn.dataset.tab);
+      document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
+      document.querySelector(`.tab[data-panel="${btn.dataset.tab}"]`)?.classList.add('active');
     });
   });
 }
@@ -73,20 +79,20 @@ function bindSettingsTabs() {
 }
 
 function renderHome() {
-  const valid = state.accounts.filter((a) => a.connection_state === 'connected').length;
+  const valid = state.accounts.filter((a) => a.connection_state === 'active').length;
   const checking = state.accounts.filter((a) => a.connection_state === 'checking').length;
   const issues = state.accounts.filter((a) => ['error', 'invalid', 'limited'].includes(a.connection_state)).length;
 
   $('stats').innerHTML = `
-    <article class="stat"><strong>${valid}</strong><small>Connected</small></article>
-    <article class="stat"><strong>${checking}</strong><small>Checking</small></article>
-    <article class="stat"><strong>${issues}</strong><small>Invalid / Limited</small></article>`;
+    <article class="stat"><strong>${valid}</strong><small>Активные</small></article>
+    <article class="stat"><strong>${checking}</strong><small>Проверяются</small></article>
+    <article class="stat"><strong>${issues}</strong><small>Ошибки/ограничения</small></article>`;
 
   const features = [
-    ['ri-upload-2-line', 'Авто-импорт', 'Выбрали файл — импорт и проверка запускаются автоматически.'],
-    ['ri-shield-check-line', 'Авто-проверка', 'После добавления идет мгновенная проверка сессии/API.'],
-    ['ri-flashlight-line', 'Минимум кликов', 'Критичные действия на первом уровне, вторичные в модалках.'],
-    ['ri-dashboard-line', 'Компактный SaaS UI', 'Сжатые отступы, быстрые анимации, clean layout.']
+    ['ri-upload-2-line', 'Авто-импорт', 'Выбрали файл — импортируется автоматически.'],
+    ['ri-shield-check-line', 'Проверка по запросу', 'Подключение только при проверке/действии пользователя.'],
+    ['ri-file-list-3-line', 'Компактный список', 'Имя, @username и ID в одном ряду.'],
+    ['ri-layout-grid-line', 'Минимум лишнего', 'Вторичные функции спрятаны в окнах.']
   ];
 
   $('homeFeatures').innerHTML = features.map(([icon, title, text]) => `<article class="feature"><i class="${icon}"></i><div><strong>${title}</strong><div>${text}</div></div></article>`).join('');
@@ -101,7 +107,7 @@ function passFilter(value, mode) {
   if (mode === 'any') return true;
   if (mode === 'yes') return Boolean(value);
   if (mode === 'no') return !value;
-  return String(value) === String(mode);
+  return true;
 }
 
 function filteredAccounts() {
@@ -109,14 +115,11 @@ function filteredAccounts() {
     if (state.status !== 'all' && a.status !== state.status) return false;
     if (!passFilter(a.premium, state.filters.premium)) return false;
     if (!passFilter(a.has2fa, state.filters.has2fa)) return false;
-    if (!passFilter(Boolean(a.username), state.filters.username)) return false;
-    if (!passFilter(a.authorized, state.filters.authorized)) return false;
-    if (state.filters.source !== 'any' && a.source !== state.filters.source) return false;
-    if (state.filters.connection_state !== 'any' && a.connection_state !== state.filters.connection_state) return false;
 
     const q = state.search.trim().toLowerCase();
     if (!q) return true;
-    return [a.name, a.phone || '', a.username || '', a.source || '', a.limits || '', a.proxy || ''].join(' ').toLowerCase().includes(q);
+    const descriptor = `${a.username ? '@' + a.username : ''} ${a.id ? 'ID: ' + a.id : ''}`.trim();
+    return [a.display_name || a.name, descriptor, a.limits || '', a.proxy || ''].join(' ').toLowerCase().includes(q);
   });
 }
 
@@ -133,10 +136,7 @@ function renderStatusPills() {
 function renderPagination(total) {
   const pages = Math.max(1, Math.ceil(total / state.pageSize));
   if (state.page > pages) state.page = pages;
-  $('pagination').innerHTML = Array.from({ length: pages }).map((_, i) => {
-    const p = i + 1;
-    return `<button class="pg ${state.page === p ? 'active' : ''}" data-p="${p}">${p}</button>`;
-  }).join('');
+  $('pagination').innerHTML = Array.from({ length: pages }).map((_, i) => `<button class="pg ${state.page === i + 1 ? 'active' : ''}" data-p="${i + 1}">${i + 1}</button>`).join('');
   $('pagination').querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => {
     state.page = Number(b.dataset.p);
     renderAccounts();
@@ -148,19 +148,22 @@ function renderAccounts() {
   const start = (state.page - 1) * state.pageSize;
   const items = list.slice(start, start + state.pageSize);
 
-  $('accountsList').innerHTML = items.map((a) => `
-    <article class="acc-item">
-      <div class="acc-left">
-        <div class="acc-title">${a.name}</div>
-        <div class="acc-sub">${a.username ? '@' + a.username : 'id: ' + a.name} · ${a.source || 'session'} · proxy: ${a.proxy || '—'} · limits: ${a.limits || '—'}</div>
-      </div>
-      <div>
-        <span class="status-tag status-${a.status || 'unknown'}">${statusMap[a.status] || 'Неизвестные'}</span>
-        <span class="conn-badge cs-${a.connection_state || 'unknown'}">${a.connection_state || 'unknown'}</span>
-      </div>
-      <button class="btn ghost" data-open="${a.name}">Открыть</button>
-    </article>
-  `).join('');
+  $('accountsList').innerHTML = items.map((a) => {
+    const desc = a.username ? `@${a.username} | ID: ${a.id || '—'}` : `ID: ${a.id || '—'}`;
+    return `
+      <article class="acc-item">
+        <div class="acc-left">
+          <div class="acc-title">${a.display_name || a.name}</div>
+          <div class="acc-sub">${desc} · limits: ${a.limits || '—'} · proxy: ${a.proxy || '—'}</div>
+        </div>
+        <div>
+          <span class="status-tag status-${a.status || 'unknown'}">${statusMap[a.status] || 'Неизвестные'}</span>
+          <span class="conn-badge cs-${a.connection_state || 'unknown'}">${connMap[a.connection_state || 'unknown'] || 'Ожидает'}</span>
+        </div>
+        <button class="btn ghost" data-open="${a.name}">Открыть</button>
+      </article>
+    `;
+  }).join('');
 
   $('accountsList').querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', async () => openAccount(b.dataset.open)));
   renderPagination(list.length);
@@ -168,9 +171,7 @@ function renderAccounts() {
 
 async function refreshAccounts() {
   const data = await callEel('list_accounts');
-  if (Array.isArray(data)) {
-    state.accounts = data.map((a) => ({ ...a, id: a.name }));
-  }
+  if (Array.isArray(data)) state.accounts = data.map((a) => ({ ...a }));
   renderHome();
   renderStatusPills();
   renderAccounts();
@@ -184,24 +185,31 @@ async function runAutoImportSession() {
   const files = await collectFiles('sessionInput');
   if (!files.length) return;
   const res = await callEel('import_session_files', $('importPrefix').value.trim(), files);
-  toast(res.ok ? `Импорт: ${res.count}. Автопроверка выполнена.` : res.error);
-  if (res.ok) await refreshAccounts();
+  const skipped = res.skipped?.length ? `, пропущено дубликатов: ${res.skipped.length}` : '';
+  toast(res.ok ? `Импортировано: ${res.count}${skipped}` : res.error);
+  $('importModal').classList.add('hidden');
+  await refreshAccounts();
 }
 
 async function runAutoImportTdata() {
   const files = await collectFiles('tdataInput');
   if (!files.length) return;
   const res = await callEel('import_tdata_files', $('tdataName').value.trim(), files);
-  toast(res.ok ? `${res.message}` : res.error);
-  if (res.ok) await refreshAccounts();
+  const skipped = res.skipped?.length ? `, пропущено: ${res.skipped.length}` : '';
+  toast(res.ok ? `${res.message}. Добавлено: ${res.imported.length}${skipped}` : res.error);
+  $('importModal').classList.add('hidden');
+  await refreshAccounts();
 }
 
 function bindAutomation() {
-  $('quickImportBtn').addEventListener('click', () => $('importModal').classList.remove('hidden'));
-  $('quickFilterBtn').addEventListener('click', () => $('filterModal').classList.remove('hidden'));
-
+  $('openImportModal').addEventListener('click', () => $('importModal').classList.remove('hidden'));
   $('sessionInput').addEventListener('change', runAutoImportSession);
   $('tdataInput').addEventListener('change', runAutoImportTdata);
+
+  $('openAuthModal').addEventListener('click', () => {
+    $('importModal').classList.add('hidden');
+    $('authModal').classList.remove('hidden');
+  });
 
   $('requestCodeBtn').addEventListener('click', async () => {
     const res = await callEel('request_code', selectedOrFirstName());
@@ -210,18 +218,22 @@ function bindAutomation() {
 
   $('signInBtn').addEventListener('click', async () => {
     const res = await callEel('sign_in', selectedOrFirstName(), $('accCode').value.trim(), $('accPassword').value.trim());
-    toast(res.ok ? 'Авторизация и проверка завершены' : res.error);
+    if (res.need_password) {
+      $('passwordWrap').classList.remove('hidden');
+      toast('Нужен пароль 2FA');
+      return;
+    }
+    toast(res.ok ? 'Вход выполнен' : res.error);
+    if (res.ok) {
+      $('authModal').classList.add('hidden');
+      $('passwordWrap').classList.add('hidden');
+    }
     await refreshAccounts();
   });
 
   $('sendMessageBtn').addEventListener('click', async () => {
     const res = await callEel('send_message', selectedOrFirstName(), $('msgTarget').value.trim(), $('msgText').value.trim());
     toast(res.ok ? 'Сообщение отправлено' : res.error);
-  });
-
-  $('loadDialogsBtn').addEventListener('click', async () => {
-    const res = await callEel('fetch_dialogs', selectedOrFirstName(), 30);
-    toast(res.ok ? `Диалогов: ${res.dialogs.length}` : res.error);
   });
 }
 
@@ -231,7 +243,7 @@ async function openAccount(name) {
   if (!res.ok) return toast(res.error);
 
   const p = res.profile;
-  const identity = p.username ? `@${p.username}` : String(p.id || 'id отсутствует');
+  const identity = p.username ? `@${p.username}` : `ID: ${p.id || '—'}`;
   $('modalAvatar').textContent = (p.name || name)[0]?.toUpperCase() || 'A';
   $('modalName').textContent = p.name || name;
   $('modalIdentity').textContent = identity;
@@ -242,7 +254,7 @@ async function openAccount(name) {
 
   const row = state.accounts.find((a) => a.name === name) || {};
   $('modalInfo').innerHTML = `
-    <div class="meta-item"><small>Статус</small><div>${row.connection_state || 'unknown'}</div></div>
+    <div class="meta-item"><small>Состояние</small><div>${connMap[row.connection_state || 'unknown'] || 'Ожидает'}</div></div>
     <div class="meta-item"><small>Лимиты</small><div>${row.limits || '—'}</div></div>
     <div class="meta-item"><small>Телефон</small><div>${p.phone || '—'}</div></div>
     <div class="meta-item"><small>Premium</small><div>${p.premium ? 'Да' : 'Нет'}</div></div>
@@ -250,7 +262,7 @@ async function openAccount(name) {
 
   $('recheckBtn').onclick = async () => {
     const r = await callEel('check_account', name);
-    toast(r.ok ? 'Проверка завершена' : r.error || 'Проверка с ошибкой');
+    toast(r.ok ? 'Проверка завершена' : r.error || 'Ошибка проверки');
     await refreshAccounts();
     await openAccount(name);
   };
@@ -268,7 +280,7 @@ async function openAccount(name) {
   $('downloadMenu').querySelectorAll('[data-format]').forEach((b) => {
     b.onclick = async () => {
       const r = await callEel('export_account', name, b.dataset.format);
-      toast(r.ok ? `${r.message}` : r.error);
+      toast(r.ok ? r.message : r.error);
       $('downloadMenu').classList.add('hidden');
     };
   });
@@ -369,7 +381,7 @@ function renderTags() {
 
 function bindModalClose() {
   $('closeAccountModal').addEventListener('click', () => $('accountModal').classList.add('hidden'));
-  ['filterModal', 'accountModal', 'importModal'].forEach((id) => {
+  ['filterModal', 'accountModal', 'importModal', 'authModal'].forEach((id) => {
     $(id).addEventListener('click', (e) => {
       if (e.target.id === id) $(id).classList.add('hidden');
     });
@@ -384,9 +396,6 @@ async function init() {
   await bindSettings();
   bindModalClose();
   await refreshAccounts();
-
-  // lightweight auto-refresh for account states
-  setInterval(refreshAccounts, 8000);
 }
 
 init();
